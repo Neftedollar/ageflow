@@ -16,6 +16,7 @@ export type {
   LoopContext,
   LoopDef,
   MCPConfig,
+  McpConfig,
   OutputOf,
   OutputZodOf,
   RetryConfig,
@@ -51,7 +52,12 @@ export {
 } from "./builders.js";
 
 // Schemas
-export { safePath, validateStaticIdentifier } from "./schemas.js";
+export {
+  safePath,
+  validateStaticIdentifier,
+  McpConfigSchema,
+} from "./schemas.js";
+export type { McpConfigInput } from "./schemas.js";
 
 // Errors
 export {
@@ -70,3 +76,10 @@ export {
   ValidationError,
 } from "./errors.js";
 export type { AttemptRecord } from "./errors.js";
+
+// MCP defaults
+export {
+  resolveMcpConfig,
+  MCP_SAFE_DEFAULTS,
+  type ResolvedMcpConfig,
+} from "./mcp-defaults.js";
