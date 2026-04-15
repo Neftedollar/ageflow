@@ -9,11 +9,12 @@
     "validate": "agentwf validate workflow.ts"
   },
   "dependencies": {
-    "@ageflow/core": "^0.1.0",
-    "@ageflow/runner-claude": "^0.1.0",
+    "@ageflow/core": "workspace:*",
+    "@ageflow/runner-claude": "workspace:*",
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@ageflow/cli": "^0.1.0"
+    "@ageflow/cli": "workspace:*",
+    "@types/node": "^22.0.0"
   }
 }
