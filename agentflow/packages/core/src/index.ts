@@ -76,3 +76,10 @@ export {
   ValidationError,
 } from "./errors.js";
 export type { AttemptRecord } from "./errors.js";
+
+// MCP defaults
+export {
+  resolveMcpConfig,
+  MCP_SAFE_DEFAULTS,
+  type ResolvedMcpConfig,
+} from "./mcp-defaults.js";
