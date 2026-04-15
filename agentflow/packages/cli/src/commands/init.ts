@@ -4,12 +4,12 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { renderError } from "../output/renderer.js";
 
-const WORKFLOW_TEMPLATE = `import { defineAgent, defineWorkflow } from "@agentflow/core";
+const WORKFLOW_TEMPLATE = `import { defineAgent, defineWorkflow, registerRunner } from "@agentflow/core";
+import { ClaudeRunner } from "@agentflow/runner-claude";
 import { z } from "zod";
 
-// Register your runners before running the workflow:
-// import { ClaudeRunner } from "@agentflow/runner-claude";
-// registerRunner("claude", new ClaudeRunner());
+// Register runners before the workflow is executed
+registerRunner("claude", new ClaudeRunner());
 
 const myAgent = defineAgent({
   runner: "claude",
@@ -59,12 +59,16 @@ export function registerInitCommand(program: Command): void {
 
         process.stdout.write(chalk.bold(`Scaffolding project: ${name}\n\n`));
 
-        // Create project directory
+        // Create project directory and agents/ subdirectory
         fs.mkdirSync(projectDir, { recursive: true });
+        fs.mkdirSync(path.join(projectDir, "agents"), { recursive: true });
 
         // Write workflow.ts
         const workflowContent = WORKFLOW_TEMPLATE.replace("WORKFLOW_NAME", name);
         fs.writeFileSync(path.join(projectDir, "workflow.ts"), workflowContent);
+
+        // Write agents/.gitkeep so the directory is tracked by git
+        fs.writeFileSync(path.join(projectDir, "agents", ".gitkeep"), "");
 
         // Write package.json
         const pkgJson = JSON.stringify(
@@ -90,6 +94,7 @@ export function registerInitCommand(program: Command): void {
         fs.writeFileSync(path.join(projectDir, "package.json"), pkgJson);
 
         process.stdout.write(chalk.green(`  ✓ ${name}/workflow.ts\n`));
+        process.stdout.write(chalk.green(`  ✓ ${name}/agents/\n`));
         process.stdout.write(chalk.green(`  ✓ ${name}/package.json\n`));
 
         process.stdout.write(

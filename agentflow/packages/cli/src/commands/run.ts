@@ -15,8 +15,7 @@ export function registerRunCommand(program: Command): void {
   program
     .command("run <workflow>")
     .description("Run a workflow file")
-    .option("--debug-prompts", "Print resolved prompts to stdout")
-    .action(async (workflowFile: string, _options: { debugPrompts?: boolean }) => {
+    .action(async (workflowFile: string) => {
       try {
         renderHeader("run", workflowFile);
 
