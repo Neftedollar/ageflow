@@ -1,5 +1,5 @@
 import type { TasksMap } from "@agentflow/core";
-import { CyclicDependencyError } from "./errors.js";
+import { CyclicDependencyError, UnresolvedDependencyError } from "./errors.js";
 
 /**
  * Topological sort using Kahn's algorithm.
@@ -32,8 +32,7 @@ export function topologicalSort(tasks: TasksMap): string[][] {
     for (const dep of deps) {
       // Only count dependencies that are within this tasks map
       if (!inDegree.has(dep)) {
-        // External dependency — skip (not in this DAG)
-        continue;
+        throw new UnresolvedDependencyError(name, dep);
       }
       inDegree.set(name, (inDegree.get(name) ?? 0) + 1);
       dependents.get(dep)?.push(name);

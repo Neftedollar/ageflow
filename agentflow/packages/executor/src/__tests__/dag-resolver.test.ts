@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { defineAgent, defineWorkflow } from "@agentflow/core";
 import { topologicalSort, getReadyTasks } from "../dag-resolver.js";
-import { CyclicDependencyError } from "../errors.js";
+import { CyclicDependencyError, UnresolvedDependencyError } from "../errors.js";
 import type { TasksMap } from "@agentflow/core";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -157,6 +157,33 @@ describe("topologicalSort", () => {
 
     const batches = topologicalSort(workflow.tasks);
     expect(batches).toHaveLength(3);
+  });
+
+  it("throws UnresolvedDependencyError for unknown dependency name", () => {
+    const tasks: TasksMap = {
+      A: makeTask(["nonexistent"]),
+    };
+
+    expect(() => topologicalSort(tasks)).toThrow(UnresolvedDependencyError);
+  });
+
+  it("UnresolvedDependencyError contains task and dep names", () => {
+    const tasks: TasksMap = {
+      myTask: makeTask(["ghost"]),
+    };
+
+    let caught: UnresolvedDependencyError | undefined;
+    try {
+      topologicalSort(tasks);
+    } catch (e) {
+      if (e instanceof UnresolvedDependencyError) {
+        caught = e;
+      }
+    }
+
+    expect(caught).toBeInstanceOf(UnresolvedDependencyError);
+    expect(caught?.taskName).toBe("myTask");
+    expect(caught?.depName).toBe("ghost");
   });
 });
 

@@ -15,15 +15,19 @@ export interface NodeRunResult<O> {
   tokensOut: number;
   latencyMs: number;
   retries: number;
+  sessionHandle: string;
 }
 
 // ─── Input sanitization ───────────────────────────────────────────────────────
 
+// Patterns cover first-line injection ((?:^|\n)), leading whitespace (\s*),
+// and case variants (i flag). Zod is the primary security boundary; this is
+// a best-effort defense against prompt injection in string leaf values.
 const INJECTION_PATTERNS = [
-  /\n---\n/g,
-  /\nSystem:/g,
-  /\nHuman:/g,
-  /\nAssistant:/g,
+  /(?:^|\n)\s*---\s*(?:\n|$)/gm,
+  /(?:^|\n)\s*System:/gim,
+  /(?:^|\n)\s*Human:/gim,
+  /(?:^|\n)\s*Assistant:/gim,
 ];
 
 /**
@@ -85,6 +89,9 @@ export async function runNode<
   resolvedInput: import("zod").infer<A extends { input: infer I extends ZodType } ? I : ZodType>,
   runner: Runner,
   taskName: string,
+  sessionHandle?: string,
+  permissions?: Record<string, boolean>,
+  filteredTools?: readonly string[],
 ): Promise<NodeRunResult<import("zod").infer<A extends { output: infer O extends ZodType } ? O : ZodType>>> {
   const resolvedDef = resolveAgentDef(task.agent);
   const maxAttempts = resolvedDef.retry.max;
@@ -106,11 +113,25 @@ export async function runNode<
       if (resolvedDef.model !== undefined) {
         spawnArgs.model = resolvedDef.model;
       }
-      if (resolvedDef.tools !== undefined && resolvedDef.tools.length > 0) {
-        spawnArgs.tools = resolvedDef.tools;
+
+      // Use filteredTools (from HITL permissions) if provided, otherwise use agent tools
+      const effectiveTools = filteredTools ?? resolvedDef.tools;
+      if (effectiveTools !== undefined && effectiveTools.length > 0) {
+        spawnArgs.tools = effectiveTools;
       }
+
       if (resolvedDef.mcps !== undefined && resolvedDef.mcps.length > 0) {
         spawnArgs.mcps = resolvedDef.mcps;
+      }
+
+      // Pass session handle if available
+      if (sessionHandle !== undefined && sessionHandle !== "") {
+        spawnArgs.sessionHandle = sessionHandle;
+      }
+
+      // Pass permissions if available
+      if (permissions !== undefined) {
+        spawnArgs.permissions = permissions;
       }
 
       const spawnResult = await runner.spawn(spawnArgs);
@@ -130,6 +151,7 @@ export async function runNode<
         tokensOut: spawnResult.tokensOut,
         latencyMs,
         retries: attempt,
+        sessionHandle: spawnResult.sessionHandle,
       };
     } catch (err) {
       // HITL conflict — never retry, throw immediately
