@@ -20,9 +20,10 @@ export const summarizeAgent = defineAgent({
     fixedCount: z.number(),
     remainingCount: z.number(),
   }),
-  prompt: ({ originalIssues }) =>
+  prompt: ({ originalIssues, fixResult }) =>
     `Write a summary report for a code review session.
 Original issues found: ${originalIssues.length}
+Fix result: ${JSON.stringify(fixResult)}
 Return JSON: { report: string, fixedCount: number, remainingCount: number }`,
   retry: { max: 2, on: ["subprocess_error", "output_validation_error"], backoff: "exponential" },
 });

@@ -5,11 +5,11 @@
   "private": true,
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke": "PATH=\"$PWD/__mocks__:$PATH\" agentwf run workflow.ts"
   },
   "dependencies": {
     "@agentflow/core": "workspace:*",
-    "@agentflow/executor": "workspace:*",
     "@agentflow/runner-claude": "workspace:*",
     "@agentflow/testing": "workspace:*"
   },
