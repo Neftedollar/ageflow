@@ -11,6 +11,21 @@
         "zod": "^3.23.0",
       },
     },
+    "examples/bug-fix-pipeline": {
+      "name": "@agentflow/example-bug-fix-pipeline",
+      "version": "0.1.0",
+      "dependencies": {
+        "@agentflow/core": "workspace:*",
+        "@agentflow/executor": "workspace:*",
+        "@agentflow/runner-claude": "workspace:*",
+        "@agentflow/testing": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^22.0.0",
+        "vitest": "^2.1.0",
+        "zod": "^3.23.0",
+      },
+    },
     "packages/cli": {
       "name": "agentflow",
       "version": "0.1.0",
@@ -98,6 +113,8 @@
   },
   "packages": {
     "@agentflow/core": ["@agentflow/core@workspace:packages/core"],
+
+    "@agentflow/example-bug-fix-pipeline": ["@agentflow/example-bug-fix-pipeline@workspace:examples/bug-fix-pipeline"],
 
     "@agentflow/executor": ["@agentflow/executor@workspace:packages/executor"],
 
