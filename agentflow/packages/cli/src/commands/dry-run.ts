@@ -134,8 +134,48 @@ function renderDryRunInner(tasks: TasksMap): void {
 }
 
 /**
+ * Build a placeholder value from a Zod schema for prompt preview.
+ * Recursively produces `{ field: <field> }` objects so nested schemas
+ * (e.g. `z.object({ issue: z.object({ file: z.string() }) })`) render
+ * as real objects rather than opaque `"<issue>"` strings.
+ */
+function buildPlaceholderValue(
+  // biome-ignore lint/suspicious/noExplicitAny: introspecting Zod internals
+  schema: any,
+  key: string,
+): unknown {
+  const def = schema?._def;
+  if (!def) return `<${key}>`;
+
+  switch (def.typeName) {
+    case "ZodObject": {
+      const shape: Record<string, unknown> = def.shape?.() ?? {};
+      const result: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(shape)) {
+        result[k] = buildPlaceholderValue(v, k);
+      }
+      return result;
+    }
+    case "ZodArray":
+      return [`<${key}[0]>`];
+    case "ZodOptional":
+    case "ZodNullable":
+      return buildPlaceholderValue(def.innerType, key);
+    case "ZodEnum":
+      return def.values?.[0] ?? `<${key}>`;
+    case "ZodNumber":
+      return 0;
+    case "ZodBoolean":
+      return false;
+    default:
+      return `<${key}>`;
+  }
+}
+
+/**
  * Build a placeholder object from a Zod schema for prompt preview.
- * Produces "{field: <field>}" style objects for display purposes.
+ * Produces `{ field: <field> }` style objects for display purposes,
+ * recursing into nested ZodObject shapes.
  */
 function buildPlaceholder(
   schema: import("zod").ZodType,
@@ -143,10 +183,10 @@ function buildPlaceholder(
   // biome-ignore lint/suspicious/noExplicitAny: introspecting Zod internals
   const def = (schema as any)._def;
   if (def?.typeName === "ZodObject") {
-    const shape = def.shape?.() ?? {};
+    const shape: Record<string, unknown> = def.shape?.() ?? {};
     const result: Record<string, unknown> = {};
-    for (const key of Object.keys(shape)) {
-      result[key] = `<${key}>`;
+    for (const [key, fieldSchema] of Object.entries(shape)) {
+      result[key] = buildPlaceholderValue(fieldSchema, key);
     }
     return result;
   }

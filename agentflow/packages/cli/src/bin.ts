@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { program } from "commander";
 import { registerDryRunCommand } from "./commands/dry-run.js";
 import { registerInitCommand } from "./commands/init.js";
