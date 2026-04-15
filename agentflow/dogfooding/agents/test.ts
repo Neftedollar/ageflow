@@ -18,7 +18,7 @@ export const testAgent = defineAgent({
     passed: z.boolean(),
     totalTests: z.number(),
     failedTests: z.number(),
-    failureDetails: z.string().optional(),  // error messages and stack traces
+    failureDetails: z.string().optional(), // error messages and stack traces
     lintErrors: z.string().optional(),
     typecheckErrors: z.string().optional(),
   }),

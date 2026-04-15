@@ -3,7 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "workspaces": ["packages/*", "packages/runners/*", "examples/*"],
+  "workspaces": [
+    "packages/*",
+    "packages/runners/*",
+    "examples/*",
+    "dogfooding"
+  ],
   "packageManager": "bun@1.2.0",
   "scripts": {
     "build": "turbo run build",

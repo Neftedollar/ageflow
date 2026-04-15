@@ -102,15 +102,16 @@ const buildLoop = loop({
         acceptanceCriteria: [],
       },
       repoPath: ".",
-      testFailure: prevTest?.passed === false
-        ? [
-            prevTest.failureDetails,
-            prevTest.lintErrors,
-            prevTest.typecheckErrors,
-          ]
-            .filter(Boolean)
-            .join("\n")
-        : undefined,
+      testFailure:
+        prevTest?.passed === false
+          ? [
+              prevTest.failureDetails,
+              prevTest.lintErrors,
+              prevTest.typecheckErrors,
+            ]
+              .filter(Boolean)
+              .join("\n")
+          : undefined,
       previousPatch: prevBuild?.patch,
     };
   },
@@ -254,7 +255,7 @@ Acceptance criteria:
           filesChanged: build?.filesChanged ?? [],
           explanation: build?.explanation ?? "",
           reviewSummary: verify.summary,
-          branchName: `fix/issue-42-task-metrics`,
+          branchName: "fix/issue-42-task-metrics",
           repoPath: ".",
         };
       },
