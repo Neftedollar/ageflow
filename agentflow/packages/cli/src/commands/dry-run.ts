@@ -157,7 +157,7 @@ function buildPlaceholderValue(
       return result;
     }
     case "ZodArray":
-      return [`<${key}[0]>`];
+      return [buildPlaceholderValue(def.type, `${key}[0]`)];
     case "ZodOptional":
     case "ZodNullable":
       return buildPlaceholderValue(def.innerType, key);
