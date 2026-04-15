@@ -23,13 +23,13 @@ export const buildAgent = defineAgent({
       acceptanceCriteria: z.array(z.string()),
     }),
     repoPath: z.string(),
-    testFailure: z.string().optional(),   // feedback from previous iteration
+    testFailure: z.string().optional(), // feedback from previous iteration
     previousPatch: z.string().optional(), // what was tried last time
   }),
   output: z.object({
-    patch: z.string(),         // unified diff or description of changes made
+    patch: z.string(), // unified diff or description of changes made
     filesChanged: z.array(z.string()),
-    explanation: z.string(),   // what was done and why
+    explanation: z.string(), // what was done and why
     confidence: z.number().min(0).max(10),
   }),
   prompt: ({ plan, repoPath, testFailure, previousPatch }) => {

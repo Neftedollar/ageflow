@@ -102,15 +102,16 @@ const buildLoop = loop({
         acceptanceCriteria: [],
       },
       repoPath: ".",
-      testFailure: prevTest?.passed === false
-        ? [
-            prevTest.failureDetails,
-            prevTest.lintErrors,
-            prevTest.typecheckErrors,
-          ]
-            .filter(Boolean)
-            .join("\n")
-        : undefined,
+      testFailure:
+        prevTest?.passed === false
+          ? [
+              prevTest.failureDetails,
+              prevTest.lintErrors,
+              prevTest.typecheckErrors,
+            ]
+              .filter(Boolean)
+              .join("\n")
+          : undefined,
       previousPatch: prevBuild?.patch,
     };
   },
