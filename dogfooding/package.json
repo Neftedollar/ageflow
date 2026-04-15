@@ -1,0 +1,19 @@
+{
+  "name": "@ageflow/dogfooding",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "agentwf run workflow.ts",
+    "dry-run": "agentwf dry-run workflow.ts",
+    "validate": "agentwf validate workflow.ts"
+  },
+  "dependencies": {
+    "@ageflow/core": "^0.1.0",
+    "@ageflow/runner-claude": "^0.1.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@ageflow/cli": "^0.1.0"
+  }
+}
