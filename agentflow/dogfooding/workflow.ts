@@ -255,7 +255,7 @@ Acceptance criteria:
           filesChanged: build?.filesChanged ?? [],
           explanation: build?.explanation ?? "",
           reviewSummary: verify.summary,
-          branchName: `fix/issue-42-task-metrics`,
+          branchName: "fix/issue-42-task-metrics",
           repoPath: ".",
         };
       },
