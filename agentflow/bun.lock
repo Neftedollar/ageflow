@@ -11,6 +11,19 @@
         "zod": "^3.23.0",
       },
     },
+    "dogfooding": {
+      "name": "@ageflow/dogfooding",
+      "version": "0.0.1",
+      "dependencies": {
+        "@ageflow/core": "workspace:*",
+        "@ageflow/runner-claude": "workspace:*",
+        "zod": "^3.23.0",
+      },
+      "devDependencies": {
+        "@ageflow/cli": "workspace:*",
+        "@types/node": "^22.0.0",
+      },
+    },
     "examples/bug-fix-pipeline": {
       "name": "@ageflow/example-bug-fix-pipeline",
       "version": "0.1.0",
@@ -26,7 +39,7 @@
       },
     },
     "packages/cli": {
-      "name": "ageflow",
+      "name": "@ageflow/cli",
       "version": "0.1.0",
       "bin": {
         "agentwf": "./dist/bin.js",
@@ -111,7 +124,11 @@
     "zod": "^3.23.0",
   },
   "packages": {
+    "@ageflow/cli": ["@ageflow/cli@workspace:packages/cli"],
+
     "@ageflow/core": ["@ageflow/core@workspace:packages/core"],
+
+    "@ageflow/dogfooding": ["@ageflow/dogfooding@workspace:dogfooding"],
 
     "@ageflow/example-bug-fix-pipeline": ["@ageflow/example-bug-fix-pipeline@workspace:examples/bug-fix-pipeline"],
 
@@ -270,8 +287,6 @@
     "@vitest/spy": ["@vitest/spy@2.1.9", "", { "dependencies": { "tinyspy": "^3.0.2" } }, "sha512-E1B35FwzXXTs9FHNK6bDszs7mtydNi5MIfUWpceJ8Xbfb1gBMscAnwLbEu+B44ed6W3XjL9/ehLPHR1fkf1KLQ=="],
 
     "@vitest/utils": ["@vitest/utils@2.1.9", "", { "dependencies": { "@vitest/pretty-format": "2.1.9", "loupe": "^3.1.2", "tinyrainbow": "^1.2.0" } }, "sha512-v0psaMSkNJ3A2NMrUEHFRzJtDPFn+/VWZ5WxImB21T9fjucJRmS7xCS3ppEnARb9y11OAzaD+P2Ps+b+BGX5iQ=="],
-
-    "ageflow": ["ageflow@workspace:packages/cli"],
 
     "ansi-align": ["ansi-align@3.0.1", "", { "dependencies": { "string-width": "^4.1.0" } }, "sha512-IOfwwBF5iczOjp/WeY4YxyjqAFMQoZufdQWDd19SEExbVLNXqvpzSJ/M7Za4/sCPmQ0+GRquoA7bGcINcxew6w=="],
 
