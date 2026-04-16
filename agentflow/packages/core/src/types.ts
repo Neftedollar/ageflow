@@ -482,3 +482,110 @@ export interface WorkflowDef<T extends TasksMap = TasksMap> {
    */
   readonly profiles?: never;
 }
+
+// ─── Run state + events ──────────────────────────────────────────────────────
+
+export type RunState =
+  | "running"
+  | "awaiting-checkpoint"
+  | "done"
+  | "failed"
+  | "cancelled";
+
+interface EventBase {
+  readonly runId: string;
+  readonly workflowName: string;
+  /** Date.now() at the moment the event was emitted. */
+  readonly timestamp: number;
+}
+
+export interface WorkflowStartEvent extends EventBase {
+  readonly type: "workflow:start";
+  readonly input: unknown;
+}
+
+export interface TaskStartEvent extends EventBase {
+  readonly type: "task:start";
+  readonly taskName: string;
+}
+
+export interface TaskCompleteEvent extends EventBase {
+  readonly type: "task:complete";
+  readonly taskName: string;
+  readonly output: unknown;
+  readonly metrics: TaskMetrics;
+}
+
+export interface TaskErrorEvent extends EventBase {
+  readonly type: "task:error";
+  readonly taskName: string;
+  readonly error: { readonly name: string; readonly message: string; readonly stack?: string };
+  readonly attempt: number;
+  /** true when retries exhausted or the error kind is non-retryable. */
+  readonly terminal: boolean;
+}
+
+export interface TaskRetryEvent extends EventBase {
+  readonly type: "task:retry";
+  readonly taskName: string;
+  /** The attempt that is about to start (0-indexed, matches node-runner). */
+  readonly attempt: number;
+  readonly reason: string;
+}
+
+export interface CheckpointEvent extends EventBase {
+  readonly type: "checkpoint";
+  readonly taskName: string;
+  readonly message: string;
+}
+
+export interface BudgetWarningEvent extends EventBase {
+  readonly type: "budget:warning";
+  readonly spentUsd: number;
+  readonly limitUsd: number;
+}
+
+export interface WorkflowCompleteEvent extends EventBase {
+  readonly type: "workflow:complete";
+  readonly result: {
+    readonly outputs: Record<string, unknown>;
+    readonly metrics: WorkflowMetrics;
+  };
+}
+
+export interface WorkflowErrorEvent extends EventBase {
+  readonly type: "workflow:error";
+  readonly error: { readonly name: string; readonly message: string; readonly stack?: string };
+}
+
+export type WorkflowEvent =
+  | WorkflowStartEvent
+  | TaskStartEvent
+  | TaskCompleteEvent
+  | TaskErrorEvent
+  | TaskRetryEvent
+  | CheckpointEvent
+  | BudgetWarningEvent
+  | WorkflowCompleteEvent
+  | WorkflowErrorEvent;
+
+/**
+ * Public, JSON-serializable snapshot of a run. Returned by
+ * `Runner.get()` / `Runner.fire()` / `Runner.list()`.
+ */
+export interface RunHandle {
+  readonly runId: string;
+  readonly state: RunState;
+  readonly workflowName: string;
+  readonly createdAt: number;
+  readonly lastEventAt: number;
+  /** Present only when state === "awaiting-checkpoint". */
+  readonly pendingCheckpoint?: CheckpointEvent;
+  /** Present only when state === "done". */
+  readonly result?: {
+    readonly outputs: Record<string, unknown>;
+    readonly metrics: WorkflowMetrics;
+  };
+  /** Present only when state === "failed". */
+  readonly error?: { readonly name: string; readonly message: string };
+}
