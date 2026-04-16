@@ -25,7 +25,10 @@
     "vitest": "^2.1.0",
     "zod": "^3.23.0"
   },
-  "repository": { "type": "git", "url": "https://github.com/Neftedollar/ageflow.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Neftedollar/ageflow.git"
+  },
   "keywords": ["ai", "agents", "workflow", "server", "sse", "hitl", "ageflow"],
   "license": "MIT"
 }
