@@ -7,6 +7,8 @@ import {
   shutdownAll,
   startMcpClients,
 } from "../mcp-client.js";
+import { RUNNER_VERSION } from "../types.js";
+import pkg from "../../package.json";
 
 // Helper: wait for a number of milliseconds
 function delay(ms: number): Promise<void> {
@@ -216,6 +218,14 @@ describe("startMcpClients logger (issue #71)", () => {
         },
       ]),
     ).rejects.toThrow(McpServerStartFailedError);
+  });
+});
+
+// ─── Issue #84 item 8: MCP Client version matches package.json ───────────────
+
+describe("RUNNER_VERSION (issue #84 item 8)", () => {
+  it("matches the version field in package.json", () => {
+    expect(RUNNER_VERSION).toBe(pkg.version);
   });
 });
 
