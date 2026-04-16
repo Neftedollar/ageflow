@@ -8,18 +8,19 @@ export interface SessionStore {
 
 /**
  * Default session store. Map<handle, ChatMessage[]>, process-local.
- * Stores copies so external mutation cannot change recorded history.
+ * Stores deep-cloned copies so external mutation of message objects
+ * cannot silently rewrite recorded history (P1-4 fix).
  */
 export class InMemorySessionStore implements SessionStore {
   private readonly data = new Map<string, ChatMessage[]>();
 
   async get(handle: string): Promise<ChatMessage[] | undefined> {
     const got = this.data.get(handle);
-    return got ? [...got] : undefined;
+    return got ? structuredClone(got) : undefined;
   }
 
   async set(handle: string, messages: ChatMessage[]): Promise<void> {
-    this.data.set(handle, [...messages]);
+    this.data.set(handle, structuredClone(messages));
   }
 
   async delete(handle: string): Promise<void> {
