@@ -582,6 +582,17 @@ export class WorkflowExecutor<T extends TasksMap> {
                 sessionHandle,
                 permissions ?? undefined,
                 filteredTools,
+                (attempt, reason) => {
+                  push({
+                    type: "task:retry",
+                    runId,
+                    workflowName,
+                    timestamp: Date.now(),
+                    taskName,
+                    attempt,
+                    reason,
+                  });
+                },
               );
 
               const latencyMs = Date.now() - taskStart;
