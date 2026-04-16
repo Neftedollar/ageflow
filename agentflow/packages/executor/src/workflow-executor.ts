@@ -1,10 +1,12 @@
 import { getRunner, resolveAgentDef } from "@ageflow/core";
 import type {
   AgentDef,
+  CheckpointEvent,
   TaskDef,
   TaskMetrics,
   TasksMap,
   WorkflowDef,
+  WorkflowEvent,
   WorkflowMetrics,
 } from "@ageflow/core";
 import { BudgetTracker } from "./budget-tracker.js";
@@ -27,6 +29,49 @@ interface WorkflowExecutorOptions {
   sessionManager?: SessionManager;
   hitlManager?: HITLManager;
   budgetTracker?: BudgetTracker;
+}
+
+export interface StreamOptions {
+  readonly signal?: AbortSignal;
+  /**
+   * Called when a checkpoint event is emitted. Returning `true` approves,
+   * `false` rejects. If omitted, the checkpoint defers to HITLManager.
+   */
+  readonly onCheckpoint?: (ev: CheckpointEvent) => Promise<boolean> | boolean;
+}
+
+// ─── Internal event queue ──────────────────────────────────────────────────────
+
+function createEventQueue() {
+  const pending: WorkflowEvent[] = [];
+  let waiter: ((v: WorkflowEvent | null) => void) | null = null;
+  let closed = false;
+  return {
+    push(ev: WorkflowEvent): void {
+      if (waiter) {
+        const w = waiter;
+        waiter = null;
+        w(ev);
+      } else {
+        pending.push(ev);
+      }
+    },
+    close(): void {
+      closed = true;
+      if (waiter) {
+        const w = waiter;
+        waiter = null;
+        w(null);
+      }
+    },
+    next(): Promise<WorkflowEvent | null> {
+      if (pending.length > 0) return Promise.resolve(pending.shift() ?? null);
+      if (closed) return Promise.resolve(null);
+      return new Promise<WorkflowEvent | null>((resolve) => {
+        waiter = resolve;
+      });
+    },
+  };
 }
 
 /**
@@ -144,6 +189,84 @@ export class WorkflowExecutor<T extends TasksMap> {
     hooks?.onWorkflowComplete?.(outputs, metrics);
 
     return { outputs, metrics };
+  }
+
+  /**
+   * Stream workflow execution as an async generator of WorkflowEvents.
+   * Returns the WorkflowResult as the generator's return value.
+   * Hooks continue to fire alongside events. Existing run() is unchanged.
+   */
+  async *stream(
+    input?: unknown,
+    options?: StreamOptions,
+  ): AsyncGenerator<WorkflowEvent, WorkflowResult<T>, void> {
+    const runId = crypto.randomUUID();
+    const workflowName = this.workflow.name;
+    const queue = createEventQueue();
+
+    // Emit workflow:start immediately.
+    queue.push({
+      type: "workflow:start",
+      runId,
+      workflowName,
+      timestamp: Date.now(),
+      input,
+    });
+
+    // Run the DAG in the background; push events via queue; close on exit.
+    const driver = (async (): Promise<WorkflowResult<T>> => {
+      try {
+        const result = await this._runBatchesEmitting(
+          this.workflow.tasks,
+          {},
+          undefined,
+          {
+            runId,
+            workflowName,
+            push: (ev) => queue.push(ev),
+            ...(options?.onCheckpoint !== undefined
+              ? { onCheckpoint: options.onCheckpoint }
+              : {}),
+          },
+        );
+        queue.push({
+          type: "workflow:complete",
+          runId,
+          workflowName,
+          timestamp: Date.now(),
+          result: {
+            outputs: result.outputs as Record<string, unknown>,
+            metrics: result.metrics,
+          },
+        });
+        queue.close();
+        return result;
+      } catch (err) {
+        const e = err instanceof Error ? err : new Error(String(err));
+        queue.push({
+          type: "workflow:error",
+          runId,
+          workflowName,
+          timestamp: Date.now(),
+          error: {
+            name: e.name,
+            message: e.message,
+            ...(e.stack !== undefined ? { stack: e.stack } : {}),
+          },
+        });
+        queue.close();
+        throw e;
+      }
+    })();
+
+    while (true) {
+      const ev = await queue.next();
+      if (ev === null) break;
+      yield ev;
+    }
+
+    // Await so we can return the final WorkflowResult.
+    return await driver;
   }
 
   /**
@@ -335,5 +458,293 @@ export class WorkflowExecutor<T extends TasksMap> {
     }
 
     return ctx;
+  }
+
+  /**
+   * Core DAG walk for stream() — emits WorkflowEvents via push().
+   * This is the new stream path; _runBatches() remains unchanged for run().
+   */
+  private async _runBatchesEmitting(
+    tasks: TasksMap,
+    initialCtx: Record<string, CtxEntry>,
+    sessionManagerOverride: SessionManager | undefined,
+    emitting: {
+      runId: string;
+      workflowName: string;
+      push: (ev: WorkflowEvent) => void;
+      onCheckpoint?: (ev: CheckpointEvent) => Promise<boolean> | boolean;
+    },
+  ): Promise<WorkflowResult<T>> {
+    const { runId, workflowName, push, onCheckpoint } = emitting;
+    const { hooks, budget } = this.workflow;
+    const sm = sessionManagerOverride ?? this.sessionManager;
+    const workflowStart = Date.now();
+
+    // Topological sort to get execution batches
+    const batches = topologicalSort(tasks);
+
+    // Working context — accumulates outputs as tasks complete
+    const ctx: Record<string, CtxEntry> = { ...initialCtx };
+
+    // Metrics accumulators
+    let totalTokensIn = 0;
+    let totalTokensOut = 0;
+    let taskCount = 0;
+
+    for (const batch of batches) {
+      // Check budget before each batch
+      if (budget !== undefined) {
+        this.budgetTracker.checkBudget(budget);
+      }
+
+      // Group batch tasks by canonical session token (D1)
+      const groups = groupBySession(batch, sm);
+
+      // Each group runs sequentially; groups run in parallel
+      await Promise.all(
+        groups.map(async (group) => {
+          for (const taskName of group) {
+            const taskDef = tasks[taskName];
+            if (taskDef === undefined) continue;
+
+            // Dispatch LoopDef to LoopExecutor
+            if ("kind" in taskDef) {
+              const loopOutput = await this.loopExecutor.run(
+                taskDef,
+                ctx,
+                taskName,
+              );
+              ctx[taskName] = { output: loopOutput, _source: "loop" };
+              continue;
+            }
+
+            // This is a TaskDef<AgentDef<...>>
+            // biome-ignore lint/suspicious/noExplicitAny: structural constraint
+            const task = taskDef as TaskDef<AgentDef<any, any, any>>;
+            const runnerName: string = task.agent.runner;
+
+            // Get runner from registry
+            const runner = getRunner(runnerName);
+            if (runner === undefined) {
+              throw new RunnerNotRegisteredError(runnerName);
+            }
+
+            // Resolve input
+            let resolvedInput: unknown;
+            if (typeof task.input === "function") {
+              resolvedInput = (
+                task.input as (ctx: Record<string, CtxEntry>) => unknown
+              )(ctx);
+            } else {
+              resolvedInput = task.input;
+            }
+
+            // Resolve HITL config (task-level overrides agent-level)
+            const resolvedDef = resolveAgentDef(task.agent);
+            const hitlConfig = this.hitlManager.resolveConfig(
+              resolvedDef.hitl,
+              task.hitl,
+            );
+
+            // Apply permissions if mode is "permissions"
+            const { tools: filteredTools, permissions } =
+              this.hitlManager.applyPermissions(resolvedDef.tools, hitlConfig);
+
+            // Run HITL checkpoint if mode is "checkpoint"
+            if (hitlConfig.mode === "checkpoint") {
+              const checkpointMessage =
+                "message" in hitlConfig && hitlConfig.message !== undefined
+                  ? hitlConfig.message
+                  : `Task "${taskName}" requires approval before proceeding.`;
+
+              // Fire onCheckpoint hook
+              hooks?.onCheckpoint?.(taskName as keyof T & string, checkpointMessage);
+
+              // Emit checkpoint event
+              const checkpointEv: CheckpointEvent = {
+                type: "checkpoint",
+                runId,
+                workflowName,
+                timestamp: Date.now(),
+                taskName,
+                message: checkpointMessage,
+              };
+              push(checkpointEv);
+
+              if (onCheckpoint !== undefined) {
+                // Caller-provided handler (stream() path)
+                const approved = await onCheckpoint(checkpointEv);
+                if (!approved) {
+                  throw new Error(`Checkpoint rejected for task "${taskName}"`);
+                }
+              } else {
+                // Legacy path: defer to HITLManager (TTY / hook)
+                await this.hitlManager.runCheckpoint(
+                  taskName,
+                  checkpointMessage,
+                  hooks,
+                );
+              }
+            }
+
+            // Get existing session handle for this task (use sm: may be loop-local)
+            const sessionHandle = sm.getHandle(taskName);
+
+            // Fire onTaskStart hook
+            hooks?.onTaskStart?.(taskName as keyof T & string);
+
+            // Emit task:start event
+            push({
+              type: "task:start",
+              runId,
+              workflowName,
+              timestamp: Date.now(),
+              taskName,
+            });
+
+            const taskStart = Date.now();
+            try {
+              const result = await runNode(
+                task,
+                resolvedInput,
+                runner,
+                taskName,
+                sessionHandle,
+                permissions ?? undefined,
+                filteredTools,
+              );
+
+              const latencyMs = Date.now() - taskStart;
+
+              // Store session handle after task completes (use sm: may be loop-local)
+              if (
+                result.sessionHandle !== undefined &&
+                result.sessionHandle !== ""
+              ) {
+                sm.setHandle(taskName, result.sessionHandle);
+              }
+
+              // Calculate estimated cost and accumulate
+              const model = resolvedDef.model ?? "_default";
+              const estimatedCost = this.budgetTracker.costFor(
+                model,
+                result.tokensIn,
+                result.tokensOut,
+              );
+              this.budgetTracker.addCost(
+                model,
+                result.tokensIn,
+                result.tokensOut,
+              );
+
+              // Check budget per-task after adding cost
+              if (budget !== undefined && this.budgetTracker.exceeded(budget)) {
+                if (budget.onExceed === "halt") {
+                  this.budgetTracker.checkBudget(budget);
+                } else if (budget.onExceed === "warn") {
+                  push({
+                    type: "budget:warning",
+                    runId,
+                    workflowName,
+                    timestamp: Date.now(),
+                    spentUsd: this.budgetTracker.total,
+                    limitUsd: budget.maxCost,
+                  });
+                }
+              }
+
+              // Store output in context with token metadata for aggregation
+              const ctxEntry: CtxEntry & {
+                _tokensIn: number;
+                _tokensOut: number;
+              } = {
+                output: result.output,
+                _source: "agent",
+                _tokensIn: result.tokensIn,
+                _tokensOut: result.tokensOut,
+              };
+              ctx[taskName] = ctxEntry;
+              totalTokensIn += result.tokensIn;
+              totalTokensOut += result.tokensOut;
+              taskCount++;
+
+              const taskMetrics: TaskMetrics = {
+                tokensIn: result.tokensIn,
+                tokensOut: result.tokensOut,
+                latencyMs,
+                retries: result.retries,
+                estimatedCost,
+              };
+
+              // Fire onTaskComplete hook
+              hooks?.onTaskComplete?.(
+                taskName as keyof T & string,
+                result.output,
+                taskMetrics,
+              );
+
+              // Emit task:complete event
+              push({
+                type: "task:complete",
+                runId,
+                workflowName,
+                timestamp: Date.now(),
+                taskName,
+                output: result.output,
+                metrics: taskMetrics,
+              });
+            } catch (err) {
+              const e = err instanceof Error ? err : new Error(String(err));
+              // Fire onTaskError hook
+              const latencyMs = Date.now() - taskStart;
+              hooks?.onTaskError?.(
+                taskName as keyof T & string,
+                e,
+                latencyMs,
+              );
+
+              // Emit task:error event (terminal: true — retries exhausted or non-retryable)
+              push({
+                type: "task:error",
+                runId,
+                workflowName,
+                timestamp: Date.now(),
+                taskName,
+                error: {
+                  name: e.name,
+                  message: e.message,
+                  ...(e.stack !== undefined ? { stack: e.stack } : {}),
+                },
+                attempt: 0,
+                terminal: true,
+              });
+
+              throw err;
+            }
+          }
+        }),
+      );
+    }
+
+    // Build outputs from ctx (only tasks defined in the tasks map)
+    const outputs: { [K in keyof T]?: unknown } = {};
+    for (const taskName of Object.keys(tasks)) {
+      if (ctx[taskName] !== undefined) {
+        outputs[taskName as keyof T] = ctx[taskName]?.output;
+      }
+    }
+
+    const totalLatencyMs = Date.now() - workflowStart;
+    const totalEstimatedCost = this.budgetTracker.total;
+
+    const metrics: WorkflowMetrics = {
+      totalLatencyMs,
+      totalTokensIn,
+      totalTokensOut,
+      totalEstimatedCost,
+      taskCount,
+    };
+
+    return { outputs, metrics };
   }
 }
