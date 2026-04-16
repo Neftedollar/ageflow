@@ -92,6 +92,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@ageflow/core": "workspace:*",
+        "zod-to-json-schema": "^3.23.0",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
