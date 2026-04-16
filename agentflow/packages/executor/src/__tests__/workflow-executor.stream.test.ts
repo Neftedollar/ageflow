@@ -1,4 +1,9 @@
-import { defineAgent, defineWorkflow, registerRunner, unregisterRunner } from "@ageflow/core";
+import {
+  defineAgent,
+  defineWorkflow,
+  registerRunner,
+  unregisterRunner,
+} from "@ageflow/core";
 import type { Runner, WorkflowEvent } from "@ageflow/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -96,5 +101,27 @@ describe("WorkflowExecutor.stream (task failure)", () => {
     } finally {
       unregisterRunner("boom");
     }
+  });
+});
+
+describe("run() is a drain over stream()", () => {
+  it("produces the same WorkflowResult as draining stream()", async () => {
+    const executor = new WorkflowExecutor(wf);
+    const runResult = await executor.run({});
+
+    const executor2 = new WorkflowExecutor(wf);
+    const gen = executor2.stream({});
+    let streamResult: IteratorResult<WorkflowEvent, unknown>;
+    do {
+      streamResult = await gen.next();
+    } while (!streamResult.done);
+
+    expect(runResult.outputs).toEqual(
+      (streamResult.value as { outputs: unknown }).outputs,
+    );
+    expect(runResult.metrics.taskCount).toBe(
+      (streamResult.value as { metrics: { taskCount: number } }).metrics
+        .taskCount,
+    );
   });
 });
