@@ -1,5 +1,6 @@
 import { BudgetExceededError } from "@ageflow/core";
 import { HitlNotInteractiveError } from "@ageflow/executor";
+import { CheckpointTimeoutError, InvalidRunStateError, RunNotFoundError } from "@ageflow/server";
 import { describe, expect, it } from "vitest";
 import { ErrorCode, McpServerError, formatErrorResult } from "../errors.js";
 
@@ -51,5 +52,31 @@ describe("McpServerError + formatErrorResult", () => {
     expect(result.isError).toBe(true);
     expect(result.structuredContent.errorCode).toBe(ErrorCode.HITL_DENIED);
     expect(result.structuredContent.context).toEqual({ taskName: "verify" });
+  });
+});
+
+describe("async-mode error mapping (#18)", () => {
+  it("includes new codes in ErrorCode enum", () => {
+    expect(ErrorCode.JOB_NOT_FOUND).toBe("JOB_NOT_FOUND");
+    expect(ErrorCode.JOB_CANCELLED).toBe("JOB_CANCELLED");
+    expect(ErrorCode.INVALID_RUN_STATE).toBe("INVALID_RUN_STATE");
+    expect(ErrorCode.ASYNC_MODE_DISABLED).toBe("ASYNC_MODE_DISABLED");
+  });
+
+  it("maps RunNotFoundError → JOB_NOT_FOUND", () => {
+    const result = formatErrorResult(new RunNotFoundError("abc"));
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.errorCode).toBe(ErrorCode.JOB_NOT_FOUND);
+  });
+
+  it("maps InvalidRunStateError → INVALID_RUN_STATE", () => {
+    const result = formatErrorResult(new InvalidRunStateError("abc", "done"));
+    expect(result.structuredContent.errorCode).toBe(ErrorCode.INVALID_RUN_STATE);
+    expect(result.structuredContent.context).toMatchObject({ runId: "abc", state: "done" });
+  });
+
+  it("maps CheckpointTimeoutError → HITL_CANCELLED (existing code, reused)", () => {
+    const result = formatErrorResult(new CheckpointTimeoutError("approve"));
+    expect(result.structuredContent.errorCode).toBe(ErrorCode.HITL_CANCELLED);
   });
 });

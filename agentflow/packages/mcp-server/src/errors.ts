@@ -1,5 +1,10 @@
 import { BudgetExceededError } from "@ageflow/core";
 import { HitlNotInteractiveError } from "@ageflow/executor";
+import {
+  CheckpointTimeoutError,
+  InvalidRunStateError,
+  RunNotFoundError,
+} from "@ageflow/server";
 
 export const ErrorCode = {
   INPUT_VALIDATION_FAILED: "INPUT_VALIDATION_FAILED",
@@ -16,6 +21,10 @@ export const ErrorCode = {
   BUSY: "BUSY",
   SERVER_SHUTDOWN: "SERVER_SHUTDOWN",
   DAG_INVALID: "DAG_INVALID",
+  JOB_NOT_FOUND: "JOB_NOT_FOUND",
+  JOB_CANCELLED: "JOB_CANCELLED",
+  INVALID_RUN_STATE: "INVALID_RUN_STATE",
+  ASYNC_MODE_DISABLED: "ASYNC_MODE_DISABLED",
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -71,6 +80,42 @@ export function formatErrorResult(err: unknown): McpToolErrorResult {
       content: [{ type: "text", text: err.message }],
       structuredContent: {
         errorCode: ErrorCode.HITL_DENIED,
+        message: err.message,
+        context: { taskName: err.taskName },
+      },
+      isError: true,
+    };
+  }
+
+  if (err instanceof RunNotFoundError) {
+    return {
+      content: [{ type: "text", text: err.message }],
+      structuredContent: {
+        errorCode: ErrorCode.JOB_NOT_FOUND,
+        message: err.message,
+        context: { runId: err.runId },
+      },
+      isError: true,
+    };
+  }
+
+  if (err instanceof InvalidRunStateError) {
+    return {
+      content: [{ type: "text", text: err.message }],
+      structuredContent: {
+        errorCode: ErrorCode.INVALID_RUN_STATE,
+        message: err.message,
+        context: { runId: err.runId, state: err.state },
+      },
+      isError: true,
+    };
+  }
+
+  if (err instanceof CheckpointTimeoutError) {
+    return {
+      content: [{ type: "text", text: err.message }],
+      structuredContent: {
+        errorCode: ErrorCode.HITL_CANCELLED,
         message: err.message,
         context: { taskName: err.taskName },
       },
