@@ -39,4 +39,38 @@ describe("InMemorySessionStore", () => {
     const got = await store.get("h");
     expect(got?.length).toBe(1);
   });
+
+  it("P1-4: mutating a returned message object does not change stored history", async () => {
+    // Shallow clone ([...messages]) does not deep-copy ChatMessage objects.
+    // structuredClone must be used so in-place mutation of a returned message
+    // cannot rewrite the stored history.
+    const store = new InMemorySessionStore();
+    const original: ChatMessage = { role: "user", content: "original" };
+    await store.set("h2", [original]);
+
+    // get() returns a deep copy; mutate it in place
+    const returned = await store.get("h2");
+    expect(returned).toBeDefined();
+    if (returned?.[0]) {
+      returned[0].content = "mutated";
+    }
+
+    // Re-get: stored history must be unchanged
+    const reloaded = await store.get("h2");
+    expect(reloaded?.[0]?.content).toBe("original");
+  });
+
+  it("P1-4: mutating the original array passed to set() does not change stored history", async () => {
+    // Also verify that structuredClone is applied on set(), not just get()
+    const store = new InMemorySessionStore();
+    const msgs: ChatMessage[] = [{ role: "user", content: "before" }];
+    await store.set("h3", msgs);
+
+    // Mutate the original message object after set
+    const m = msgs[0];
+    if (m) m.content = "after";
+
+    const stored = await store.get("h3");
+    expect(stored?.[0]?.content).toBe("before");
+  });
 });

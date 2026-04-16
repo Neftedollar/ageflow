@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { JobEventRecorder } from "../job-event-recorder.js";
 import type {
   BudgetWarningEvent,
   TaskCompleteEvent,
   TaskStartEvent,
 } from "@ageflow/core";
+import { describe, expect, it } from "vitest";
+import { JobEventRecorder } from "../job-event-recorder.js";
 
 const baseEv = {
   runId: "r1",
@@ -15,7 +15,11 @@ const baseEv = {
 describe("JobEventRecorder", () => {
   it("tracks lastTaskStart, tasksCompleted, lastBudgetWarning per runId", () => {
     const rec = new JobEventRecorder();
-    rec.record({ ...baseEv, type: "task:start", taskName: "a" } as TaskStartEvent);
+    rec.record({
+      ...baseEv,
+      type: "task:start",
+      taskName: "a",
+    } as TaskStartEvent);
     expect(rec.snapshot("r1")).toMatchObject({
       tasksCompleted: 0,
       lastTaskStart: { taskName: "a" },
@@ -45,8 +49,18 @@ describe("JobEventRecorder", () => {
 
   it("isolates state between runIds", () => {
     const rec = new JobEventRecorder();
-    rec.record({ ...baseEv, runId: "a", type: "task:start", taskName: "x" } as TaskStartEvent);
-    rec.record({ ...baseEv, runId: "b", type: "task:start", taskName: "y" } as TaskStartEvent);
+    rec.record({
+      ...baseEv,
+      runId: "a",
+      type: "task:start",
+      taskName: "x",
+    } as TaskStartEvent);
+    rec.record({
+      ...baseEv,
+      runId: "b",
+      type: "task:start",
+      taskName: "y",
+    } as TaskStartEvent);
     expect(rec.snapshot("a")?.lastTaskStart?.taskName).toBe("x");
     expect(rec.snapshot("b")?.lastTaskStart?.taskName).toBe("y");
   });
@@ -58,7 +72,11 @@ describe("JobEventRecorder", () => {
 
   it("drops state on forget(runId)", () => {
     const rec = new JobEventRecorder();
-    rec.record({ ...baseEv, type: "task:start", taskName: "a" } as TaskStartEvent);
+    rec.record({
+      ...baseEv,
+      type: "task:start",
+      taskName: "a",
+    } as TaskStartEvent);
     expect(rec.snapshot("r1")).toBeDefined();
     rec.forget("r1");
     expect(rec.snapshot("r1")).toBeUndefined();
