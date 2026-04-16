@@ -119,3 +119,71 @@ describe("ApiRunner.spawn", () => {
     expect(body.messages[0]).toEqual({ role: "system", content: "be concise" });
   });
 });
+
+describe("ApiRunner.validate", () => {
+  it("returns ok + version from the first model id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: [{ id: "gpt-4o" }, { id: "gpt-4o-mini" }] }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+    const runner = new ApiRunner({
+      baseUrl: "https://example.test/v1",
+      apiKey: "k",
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    const res = await runner.validate();
+    expect(res.ok).toBe(true);
+    expect(res.version).toBe("gpt-4o");
+  });
+
+  it("returns { ok: false } on 401", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("unauthorized", {
+        status: 401,
+        statusText: "Unauthorized",
+      }),
+    );
+    const runner = new ApiRunner({
+      baseUrl: "https://example.test/v1",
+      apiKey: "bad",
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    const res = await runner.validate();
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("401");
+  });
+
+  it("returns { ok: false } when fetch throws", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+    const runner = new ApiRunner({
+      baseUrl: "http://localhost:1",
+      apiKey: "k",
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    const res = await runner.validate();
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("ECONNREFUSED");
+  });
+
+  it("trailing slash on baseUrl is normalized", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ id: "m" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const runner = new ApiRunner({
+      baseUrl: "https://example.test/v1/",
+      apiKey: "k",
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    await runner.validate();
+    const url = fetchMock.mock.calls[0]?.[0] as string;
+    expect(url).toBe("https://example.test/v1/models");
+  });
+});
