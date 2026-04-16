@@ -1,16 +1,17 @@
 import type { WorkflowDef } from "@ageflow/core";
+import type { McpJsonSchema } from "./schema-convert.js";
 import { type ToolDefinition, buildToolDefinition } from "./tool-registry.js";
 
-const JOB_ID_SCHEMA = {
+const JOB_ID_SCHEMA: McpJsonSchema = {
   type: "object",
   required: ["jobId"],
   properties: {
     jobId: { type: "string", description: "Job identifier (UUID)" },
   },
   additionalProperties: false,
-} as const;
+};
 
-const RESUME_SCHEMA = {
+const RESUME_SCHEMA: McpJsonSchema = {
   type: "object",
   required: ["jobId", "approved"],
   properties: {
@@ -21,9 +22,9 @@ const RESUME_SCHEMA = {
     },
   },
   additionalProperties: false,
-} as const;
+};
 
-const STATUS_OUTPUT_SCHEMA = {
+const STATUS_OUTPUT_SCHEMA: McpJsonSchema = {
   type: "object",
   required: ["state", "createdAt", "lastEventAt"],
   properties: {
@@ -51,9 +52,9 @@ const STATUS_OUTPUT_SCHEMA = {
     createdAt: { type: "number" },
     lastEventAt: { type: "number" },
   },
-} as const;
+};
 
-const RESULT_OUTPUT_SCHEMA = {
+const RESULT_OUTPUT_SCHEMA: McpJsonSchema = {
   type: "object",
   // Either { pending: true } OR { state: "done", output: ..., metrics: ... }
   properties: {
@@ -62,9 +63,9 @@ const RESULT_OUTPUT_SCHEMA = {
     output: {},
     metrics: { type: "object" },
   },
-} as const;
+};
 
-const CANCEL_OUTPUT_SCHEMA = {
+const CANCEL_OUTPUT_SCHEMA: McpJsonSchema = {
   type: "object",
   required: ["cancelled", "priorState"],
   properties: {
@@ -72,14 +73,14 @@ const CANCEL_OUTPUT_SCHEMA = {
     priorState: { type: "string" },
   },
   additionalProperties: false,
-} as const;
+};
 
-const RESUME_OUTPUT_SCHEMA = {
+const RESUME_OUTPUT_SCHEMA: McpJsonSchema = {
   type: "object",
   required: ["resumed"],
   properties: { resumed: { type: "boolean" } },
   additionalProperties: false,
-} as const;
+};
 
 /**
  * Build the 5 MCP tool definitions exposed in async mode:
