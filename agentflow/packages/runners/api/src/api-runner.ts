@@ -32,8 +32,27 @@ export class ApiRunner implements Runner {
   }
 
   async validate(): Promise<{ ok: boolean; version?: string; error?: string }> {
-    // Stub — real implementation is Phase 6
-    return { ok: true };
+    try {
+      const res = await this.fetch(`${this.baseUrl}/models`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          ...this.headers,
+        },
+      });
+      if (!res.ok) {
+        return {
+          ok: false,
+          error: `HTTP ${res.status} ${res.statusText}`.trim(),
+        };
+      }
+      const body = (await res.json()) as { data?: Array<{ id: string }> };
+      const version = body.data?.[0]?.id;
+      return { ok: true, ...(version !== undefined ? { version } : {}) };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: message };
+    }
   }
 
   async spawn(args: RunnerSpawnArgs): Promise<RunnerSpawnResult> {
