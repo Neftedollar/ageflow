@@ -103,11 +103,9 @@ class McpClientImpl implements McpClient {
     // C3: AbortController so the SDK cleans up the in-flight RPC on timeout
     const ctrl = new AbortController();
 
-    const doCall = this.client.callTool(
-      { name, arguments: args },
-      undefined,
-      { signal: ctrl.signal },
-    );
+    const doCall = this.client.callTool({ name, arguments: args }, undefined, {
+      signal: ctrl.signal,
+    });
 
     // C1: hoist the SIGTERM timer so the finally block can cancel it on the
     //     happy path, preventing spurious SIGTERM after a successful call.

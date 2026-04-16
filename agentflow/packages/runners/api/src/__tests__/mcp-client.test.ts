@@ -1,6 +1,10 @@
 import { spawnMockMcpServer } from "@ageflow/testing";
 import { describe, expect, it } from "vitest";
-import { McpToolCallFailedError, shutdownAll, startMcpClients } from "../mcp-client.js";
+import {
+  McpToolCallFailedError,
+  shutdownAll,
+  startMcpClients,
+} from "../mcp-client.js";
 
 // Helper: wait for a number of milliseconds
 function delay(ms: number): Promise<void> {
@@ -89,8 +93,7 @@ describe("McpClient timeout and kill escalation", () => {
       // callTool should reject with a timeout error
       await expect(client.callTool("hang", {})).rejects.toSatisfy(
         (err: unknown) =>
-          err instanceof McpToolCallFailedError &&
-          /timeout/i.test(err.message),
+          err instanceof McpToolCallFailedError && /timeout/i.test(err.message),
       );
 
       // After rejection the subprocess should have received SIGTERM and exit.
