@@ -4,6 +4,7 @@ export {
   MaxToolRoundsError,
   ApiRequestError,
   ToolNotFoundError,
+  McpPoolCollisionError,
 } from "./errors.js";
 export type {
   ApiRunnerConfig,
