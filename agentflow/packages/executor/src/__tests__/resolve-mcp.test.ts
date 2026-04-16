@@ -16,31 +16,30 @@ describe("resolveMcp", () => {
   });
 
   it("agent mcp REPLACES workflow by default", () => {
-    const got = resolveMcp(
-      [fsSrv],
-      { servers: [ghSrv] },
-      undefined,
-    );
+    const got = resolveMcp([fsSrv], { servers: [ghSrv] }, undefined);
     expect(got.map((s) => s.name)).toEqual(["github"]);
   });
 
   it("agent mcp with extendWorkflow=true APPENDS + dedupes", () => {
     const got = resolveMcp(
       [fsSrv, ghSrv],
-      { servers: [{ ...ghSrv, tools: ["create_issue"] }, slackSrv], extendWorkflow: true },
+      {
+        servers: [{ ...ghSrv, tools: ["create_issue"] }, slackSrv],
+        extendWorkflow: true,
+      },
       undefined,
     );
     // agent wins on duplicate name
     expect(got.map((s) => s.name)).toEqual(["filesystem", "github", "slack"]);
-    expect(got.find((s) => s.name === "github")?.tools).toEqual(["create_issue"]);
+    expect(got.find((s) => s.name === "github")?.tools).toEqual([
+      "create_issue",
+    ]);
   });
 
   it("task mcpOverride filters to the named subset", () => {
-    const got = resolveMcp(
-      [fsSrv, ghSrv, slackSrv],
-      undefined,
-      { servers: ["slack"] },
-    );
+    const got = resolveMcp([fsSrv, ghSrv, slackSrv], undefined, {
+      servers: ["slack"],
+    });
     expect(got.map((s) => s.name)).toEqual(["slack"]);
   });
 

@@ -485,7 +485,9 @@ describe("runPreflight — MCP config validation", () => {
                 {
                   name: "github",
                   command: "npx",
-                  env: { GITHUB_TOKEN: "${env:GITHUB_TOKEN_DEFINITELY_UNSET_XYZ}" },
+                  env: {
+                    GITHUB_TOKEN: "${env:GITHUB_TOKEN_DEFINITELY_UNSET_XYZ}",
+                  },
                 },
               ],
             },

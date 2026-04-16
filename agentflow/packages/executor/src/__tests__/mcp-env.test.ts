@@ -12,9 +12,7 @@ describe("expandEnvVars", () => {
     expect(() => expandEnvVars("${env:MISSING}", {})).toThrow(/MISSING/);
   });
   it("supports multiple substitutions in one string", () => {
-    expect(
-      expandEnvVars("${env:A}-${env:B}", { A: "x", B: "y" }),
-    ).toBe("x-y");
+    expect(expandEnvVars("${env:A}-${env:B}", { A: "x", B: "y" })).toBe("x-y");
   });
   it("rejects bash-style $NAME (no curly) as a security measure", () => {
     expect(() => expandEnvVars("$FOO", { FOO: "x" })).toThrow();
