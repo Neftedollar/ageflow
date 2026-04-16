@@ -45,7 +45,7 @@ export function formatErrorResult(err: unknown): McpToolErrorResult {
       structuredContent: {
         errorCode: err.errorCode,
         message: err.message,
-        context: err.context,
+        ...(err.context !== undefined ? { context: err.context } : {}),
       },
       isError: true,
     };
