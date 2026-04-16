@@ -79,7 +79,7 @@ const fileAgent = defineAgent({
         tools: ["read_file", "list_directory"],
         // Refine — validate path args before forwarding to the server
         refine: {
-          read_file: z.object({ path: safePath("/workspace") }),
+          read_file: z.object({ path: safePath({ allowAbsolute: false }) }),
         },
         // ${env:VAR} is resolved at launch time by the executor
         env: { NODE_ENV: "${env:NODE_ENV}" },

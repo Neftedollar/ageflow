@@ -81,7 +81,7 @@ const fileAgent = defineAgent({
         tools: ["read_file", "list_directory"],
         // Refine — validate path args before forwarding to the server
         refine: {
-          read_file: z.object({ path: safePath("/workspace") }),
+          read_file: z.object({ path: safePath({ allowAbsolute: false }) }),
         },
         // ${env:VAR} is resolved at launch time by the executor
         env: { NODE_ENV: "${env:NODE_ENV}" },
@@ -92,7 +92,7 @@ const fileAgent = defineAgent({
 ```
 
 **Allowlist** (`tools`): when set, only the listed tools are passed to the CLI
-via `--allowedTools mcp__filesystem__read_file` flags. Unlisted tools are
+via `--allowedTools mcp__filesystem__read_file` flag (comma-joined). Unlisted tools are
 denied before they reach the model.
 
 **Refine** (`refine`): a map of tool name → Zod schema. Arguments are validated
