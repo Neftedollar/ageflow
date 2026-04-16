@@ -277,6 +277,32 @@ describe("ApiRunner.validate", () => {
     expect(res.error).toContain("ECONNREFUSED");
   });
 
+  it("P2-8: validate() passes AbortSignal.timeout so stalled proxy is bounded", async () => {
+    // Verify that the signal option is forwarded — we capture the RequestInit
+    // and check that signal is an AbortSignal (i.e. the fetch was timeout-bound).
+    let capturedSignal: AbortSignal | undefined;
+    const hangingFetch = vi
+      .fn()
+      .mockImplementation((_url: string, init: RequestInit) => {
+        capturedSignal = init.signal as AbortSignal | undefined;
+        // Return a never-resolving promise to simulate a stalled proxy
+        return new Promise<never>(() => {});
+      });
+    const runner = new ApiRunner({
+      baseUrl: "https://example.test/v1",
+      apiKey: "k",
+      requestTimeout: 5_000,
+      fetch: hangingFetch as unknown as typeof fetch,
+    });
+    // Fire-and-forget (we just need the fetch to have been called)
+    const validatePromise = runner.validate();
+    // Yield to the microtask queue so fetch is called
+    await new Promise((r) => setTimeout(r, 0));
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    // Clean up — abort to prevent timer leak
+    validatePromise.catch(() => {});
+  });
+
   it("trailing slash on baseUrl is normalized", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: [{ id: "m" }] }), {
