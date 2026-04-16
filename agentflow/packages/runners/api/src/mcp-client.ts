@@ -100,17 +100,31 @@ class McpClientImpl implements McpClient {
   ): Promise<unknown> {
     const timeoutMs = this.callTimeoutMs;
 
-    const doCall = this.client.callTool({ name, arguments: args });
+    // C3: AbortController so the SDK cleans up the in-flight RPC on timeout
+    const ctrl = new AbortController();
 
+    const doCall = this.client.callTool(
+      { name, arguments: args },
+      undefined,
+      { signal: ctrl.signal },
+    );
+
+    // C1: hoist the SIGTERM timer so the finally block can cancel it on the
+    //     happy path, preventing spurious SIGTERM after a successful call.
+    let sigtermTimer: ReturnType<typeof setTimeout> | undefined;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
+    // C2: track whether SIGTERM was sent so we do NOT cancel the SIGKILL timer
+    //     when the timeout path runs through finally.
+    let sentSigterm = false;
 
     const timeout = new Promise<never>((_, reject) => {
-      const t = setTimeout(() => {
+      sigtermTimer = setTimeout(() => {
         // Try SIGTERM first, then SIGKILL after grace period
         const pid = this.transport.pid;
         if (pid !== null) {
           try {
             process.kill(pid, "SIGTERM");
+            sentSigterm = true;
           } catch {
             // process may already be gone
           }
@@ -123,7 +137,11 @@ class McpClientImpl implements McpClient {
               }
             }
           }, SIGKILL_GRACE_MS);
+          killTimer.unref?.();
         }
+        // C3: abort the in-flight SDK request so the client cleans up the
+        //     pending request ID and does not process a late server reply.
+        ctrl.abort();
         reject(
           new McpToolCallFailedError(
             name,
@@ -132,8 +150,7 @@ class McpClientImpl implements McpClient {
         );
       }, timeoutMs);
       // Allow the process to exit without waiting for this timer
-      t.unref?.();
-      return t;
+      sigtermTimer.unref?.();
     });
 
     try {
@@ -158,7 +175,13 @@ class McpClientImpl implements McpClient {
       }
       return res;
     } finally {
-      if (killTimer !== undefined) {
+      // C1: always clear the SIGTERM timer — on the happy path it hasn't fired
+      //     yet and must be cancelled to prevent spurious kills.
+      clearTimeout(sigtermTimer);
+      // C2: only cancel the SIGKILL escalation if SIGTERM was never sent
+      //     (i.e. happy path). When sentSigterm is true we are on the timeout
+      //     path and the SIGKILL timer must be allowed to fire.
+      if (!sentSigterm && killTimer !== undefined) {
         clearTimeout(killTimer);
       }
     }
