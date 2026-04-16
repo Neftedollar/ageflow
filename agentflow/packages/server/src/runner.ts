@@ -191,7 +191,16 @@ export function createRunner(config: RunnerConfig = {}): Runner {
         const { resolve } = h.pendingCheckpoint;
         resolve(false);
       }
-      h.markCancelled();
+      // Only mark cancelled when the run is not already in a terminal state.
+      // Calling cancel() on a done/failed/cancelled run must be a no-op so the
+      // terminal result is never overwritten.
+      if (
+        h.state !== "done" &&
+        h.state !== "failed" &&
+        h.state !== "cancelled"
+      ) {
+        h.markCancelled();
+      }
     },
 
     get: (runId) => registry.get(runId),

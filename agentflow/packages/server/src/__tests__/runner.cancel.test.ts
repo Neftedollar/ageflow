@@ -76,4 +76,16 @@ describe("cancel", () => {
     expect(() => runner.cancel("nope")).not.toThrow();
     runner.close();
   });
+
+  it("P2-4: cancel() is no-op on already-done run (does not overwrite state)", async () => {
+    const runner = createRunner();
+    // Wait for the run to complete naturally
+    const handle = await new Promise<{ runId: string }>((resolve) => {
+      const h = runner.fire(wf, {}, { onComplete: () => resolve(h) });
+    });
+    // Run is now done — cancel() must not overwrite state
+    runner.cancel(handle.runId);
+    expect(runner.get(handle.runId)?.state).toBe("done");
+    runner.close();
+  });
 });
