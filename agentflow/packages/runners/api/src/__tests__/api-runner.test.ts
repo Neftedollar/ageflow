@@ -145,9 +145,7 @@ describe("P1-3: tool registry filtered by args.tools allowlist", () => {
       usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
     };
 
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResp(toolCallResponse));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResp(toolCallResponse));
 
     const runner = new ApiRunner({
       baseUrl: "https://example.test/v1",

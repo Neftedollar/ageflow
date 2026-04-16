@@ -1,6 +1,10 @@
 import { BudgetExceededError } from "@ageflow/core";
 import { HitlNotInteractiveError } from "@ageflow/executor";
-import { CheckpointTimeoutError, InvalidRunStateError, RunNotFoundError } from "@ageflow/server";
+import {
+  CheckpointTimeoutError,
+  InvalidRunStateError,
+  RunNotFoundError,
+} from "@ageflow/server";
 import { describe, expect, it } from "vitest";
 import { ErrorCode, McpServerError, formatErrorResult } from "../errors.js";
 
@@ -71,8 +75,13 @@ describe("async-mode error mapping (#18)", () => {
 
   it("maps InvalidRunStateError → INVALID_RUN_STATE", () => {
     const result = formatErrorResult(new InvalidRunStateError("abc", "done"));
-    expect(result.structuredContent.errorCode).toBe(ErrorCode.INVALID_RUN_STATE);
-    expect(result.structuredContent.context).toMatchObject({ runId: "abc", state: "done" });
+    expect(result.structuredContent.errorCode).toBe(
+      ErrorCode.INVALID_RUN_STATE,
+    );
+    expect(result.structuredContent.context).toMatchObject({
+      runId: "abc",
+      state: "done",
+    });
   });
 
   it("maps CheckpointTimeoutError → HITL_CANCELLED (existing code, reused)", () => {
