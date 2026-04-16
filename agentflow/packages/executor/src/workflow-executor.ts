@@ -1,4 +1,9 @@
-import { NodeMaxRetriesError, getRunner, resolveAgentDef } from "@ageflow/core";
+import {
+  NodeMaxRetriesError,
+  getRunner,
+  getRunners,
+  resolveAgentDef,
+} from "@ageflow/core";
 import type {
   AgentDef,
   CheckpointEvent,
@@ -237,6 +242,11 @@ export class WorkflowExecutor<T extends TasksMap> {
         });
         driverError = e;
         queue.close();
+      } finally {
+        // Shut down all registered runners (success OR error path).
+        // Errors from shutdown are logged as warnings and never mask the
+        // primary workflow result.
+        await this._shutdownRunners();
       }
     })();
     // Suppress the floating promise rejection (the IIFE returns void / never rejects).
@@ -755,5 +765,26 @@ export class WorkflowExecutor<T extends TasksMap> {
     };
 
     return { outputs, metrics };
+  }
+
+  /**
+   * Invoke `shutdown()` on every registered runner that implements it.
+   * Called after workflow completion (success OR error).
+   * Errors are logged as warnings so they never mask the primary workflow result.
+   */
+  private async _shutdownRunners(): Promise<void> {
+    const runners = getRunners();
+    await Promise.all(
+      [...runners.entries()].map(async ([name, runner]) => {
+        try {
+          await runner.shutdown?.();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[AgentFlow] runner "${name}" shutdown() failed: ${msg}`,
+          );
+        }
+      }),
+    );
   }
 }
