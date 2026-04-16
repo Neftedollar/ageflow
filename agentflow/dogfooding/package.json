@@ -6,7 +6,8 @@
   "scripts": {
     "run": "agentwf run workflow.ts",
     "dry-run": "agentwf dry-run workflow.ts",
-    "validate": "agentwf validate workflow.ts"
+    "validate": "agentwf validate workflow.ts",
+    "serve": "agentwf mcp serve workflow.ts"
   },
   "dependencies": {
     "@ageflow/core": "workspace:*",
