@@ -132,7 +132,7 @@ export async function dispatchStart(
         : {}),
       // Apply HITL strategy: "auto" → approve, "deny" → reject, "elicit" → deferred.
       ...(runOpts.onCheckpoint !== undefined
-        ? { onCheckpoint: (ev) => runOpts.onCheckpoint!(ev) }
+        ? { onCheckpoint: (ev) => runOpts.onCheckpoint?.(ev) }
         : {}),
       onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
       onComplete: () => {
@@ -167,7 +167,7 @@ export async function dispatchStart(
     //   - "elicit" maps to undefined → runner uses deferred path so
     //     resume_workflow can resolve checkpoints externally.
     ...(runOpts.onCheckpoint !== undefined
-      ? { onCheckpoint: (ev) => runOpts.onCheckpoint!(ev) }
+      ? { onCheckpoint: (ev) => runOpts.onCheckpoint?.(ev) }
       : {}),
     onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
     onComplete: () => {
