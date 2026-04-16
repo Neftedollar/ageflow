@@ -314,13 +314,17 @@ v1 (active, score: 0.6)
 
 ## 7. Changes to Existing Packages
 
-### 7.1 `@ageflow/core` — new types only
+### 7.1 `@ageflow/core` — one new hook, no learning types
 
-Add to `types.ts` (no logic changes):
-- `ExecutionTrace` interface
-- `TaskTrace` interface
-- `Feedback` interface
-- `SkillRecord` interface (or re-export from `@ageflow/learning`)
+All learning-specific types (`ExecutionTrace`, `TaskTrace`, `Feedback`,
+`SkillRecord`) live in `@ageflow/learning`. Core does NOT import or re-export
+them — clean boundary.
+
+Add to `WorkflowHooks` in `types.ts`:
+- `getSystemPromptPrefix?: (taskName: string) => string | undefined` — generic
+  hook for injecting extra context into agent prompts. Learning is the first
+  consumer, but the hook is useful beyond learning (e.g., per-task instructions,
+  environment-specific context).
 
 ### 7.2 `@ageflow/executor` — ~5 lines
 
