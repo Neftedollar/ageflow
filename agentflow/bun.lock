@@ -152,6 +152,7 @@
       "version": "0.2.0",
       "dependencies": {
         "@ageflow/core": "workspace:*",
+        "@modelcontextprotocol/sdk": "^1.0.0",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -202,6 +203,7 @@
       "dependencies": {
         "@ageflow/core": "workspace:*",
         "@ageflow/executor": "workspace:*",
+        "@modelcontextprotocol/sdk": "^1.0.0",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
