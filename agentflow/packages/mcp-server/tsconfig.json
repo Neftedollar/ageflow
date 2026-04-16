@@ -3,8 +3,18 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "composite": true
+    "composite": true,
+    "paths": {
+      "@ageflow/core": ["../core/src/index.ts"],
+      "@ageflow/executor": ["../executor/src/index.ts"],
+      "@ageflow/server": ["../server/src/index.ts"]
+    }
   },
+  "references": [
+    { "path": "../core" },
+    { "path": "../executor" },
+    { "path": "../server" }
+  ],
   "include": ["src/**/*"],
   "exclude": ["src/**/__tests__/**", "src/**/*.test.ts", "dist"]
 }
