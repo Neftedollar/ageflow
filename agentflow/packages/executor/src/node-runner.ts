@@ -8,6 +8,7 @@ import type { AgentDef, AttemptRecord, Runner, TaskDef } from "@ageflow/core";
 import type { ZodType } from "zod";
 import { OutputValidationError } from "./errors.js";
 import { parseAgentOutput } from "./output-parser.js";
+import { buildOutputSchemaPrompt } from "./schema-prompt.js";
 
 export interface NodeRunResult<O> {
   output: O;
@@ -123,6 +124,7 @@ export async function runNode<
       const spawnArgs: import("@ageflow/core").RunnerSpawnArgs = {
         prompt,
         taskName,
+        systemPrompt: buildOutputSchemaPrompt(resolvedDef.output),
       };
       if (resolvedDef.model !== undefined) {
         spawnArgs.model = resolvedDef.model;

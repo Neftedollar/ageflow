@@ -350,4 +350,67 @@ describe("runNode", () => {
     const inputUsed = promptSpy.mock.calls[0]?.[0] as { text: string };
     expect(inputUsed.text).toContain("\n---\n");
   });
+
+  it("passes a systemPrompt to the runner containing the output JSON schema", async () => {
+    let capturedSystemPrompt: string | undefined;
+
+    const runner: import("@ageflow/core").Runner = {
+      validate: vi.fn().mockResolvedValue({ ok: true }),
+      spawn: vi.fn(
+        async (args: import("@ageflow/core").RunnerSpawnArgs) => {
+          capturedSystemPrompt = args.systemPrompt;
+          return makeSuccessResult({ result: "ok" });
+        },
+      ),
+    };
+
+    const task = { agent: simpleAgent };
+    await Promise.all([
+      runNode(task, { text: "hello" }, runner, "schema-prompt-task"),
+      vi.runAllTimersAsync(),
+    ]);
+
+    expect(capturedSystemPrompt).toBeDefined();
+    expect(capturedSystemPrompt).toContain("You MUST respond with valid JSON");
+    // Output schema has a "result" string field — it should appear in the prompt
+    expect(capturedSystemPrompt).toContain('"result"');
+  });
+
+  it("systemPrompt includes the exact schema keys from the agent output", async () => {
+    const detailedAgent = defineAgent({
+      runner: "mock",
+      input: z.object({ query: z.string() }),
+      output: z.object({
+        title: z.string(),
+        score: z.number(),
+        tags: z.array(z.string()),
+      }),
+      prompt: ({ query }) => `Search: ${query}`,
+    });
+
+    let capturedSystemPrompt: string | undefined;
+    const runner: import("@ageflow/core").Runner = {
+      validate: vi.fn().mockResolvedValue({ ok: true }),
+      spawn: vi.fn(
+        async (args: import("@ageflow/core").RunnerSpawnArgs) => {
+          capturedSystemPrompt = args.systemPrompt;
+          return makeSuccessResult({ title: "t", score: 1, tags: [] });
+        },
+      ),
+    };
+
+    await Promise.all([
+      runNode(
+        { agent: detailedAgent },
+        { query: "test" },
+        runner,
+        "schema-keys-task",
+      ),
+      vi.runAllTimersAsync(),
+    ]);
+
+    expect(capturedSystemPrompt).toContain('"title"');
+    expect(capturedSystemPrompt).toContain('"score"');
+    expect(capturedSystemPrompt).toContain('"tags"');
+  });
 });
