@@ -22,8 +22,9 @@ import { auditAgent } from "./agents/audit.js";
 
 // ─── Parse --runner flag ───────────────────────────────────────────────────────
 
-const runnerArg = process.argv.find((a) => a.startsWith("--runner="))?.slice(9)
-  ?? process.argv[process.argv.indexOf("--runner") + 1];
+const runnerArg =
+  process.argv.find((a) => a.startsWith("--runner="))?.slice(9) ??
+  process.argv[process.argv.indexOf("--runner") + 1];
 
 const VALID_RUNNERS = ["api", "claude", "codex"] as const;
 type RunnerKind = (typeof VALID_RUNNERS)[number];

@@ -45,31 +45,30 @@ describe("agent-uses-mcp workflow (api runner)", () => {
 // These tests prove that the auditAgent factory produces a well-typed AgentDef
 // regardless of the runner string — the workflow DSL is runner-agnostic.
 
-describe.each([
-  ["api" as const],
-  ["claude" as const],
-  ["codex" as const],
-])("auditAgent with runner=%s", (r) => {
-  it("typechecks and runs with mock harness", async () => {
-    const wf = defineWorkflow({
-      name: `agent-uses-mcp-demo-${r}`,
-      tasks: {
-        audit: {
-          agent: auditAgent(r),
-          input: { root: "/tmp/workdir" },
+describe.each([["api" as const], ["claude" as const], ["codex" as const]])(
+  "auditAgent with runner=%s",
+  (r) => {
+    it("typechecks and runs with mock harness", async () => {
+      const wf = defineWorkflow({
+        name: `agent-uses-mcp-demo-${r}`,
+        tasks: {
+          audit: {
+            agent: auditAgent(r),
+            input: { root: "/tmp/workdir" },
+          },
         },
-      },
+      });
+
+      const harness = createTestHarness(wf);
+      harness.mockAgent("audit", MOCK_OUTPUT);
+      const res = await harness.run({});
+
+      const out = res.outputs.audit as typeof MOCK_OUTPUT;
+      expect(out.summary).toContain("3 files");
+      expect(out.fileCount).toBe(3);
     });
-
-    const harness = createTestHarness(wf);
-    harness.mockAgent("audit", MOCK_OUTPUT);
-    const res = await harness.run({});
-
-    const out = res.outputs.audit as typeof MOCK_OUTPUT;
-    expect(out.summary).toContain("3 files");
-    expect(out.fileCount).toBe(3);
-  });
-});
+  },
+);
 
 // ─── Workflow graph shape ─────────────────────────────────────────────────────
 
