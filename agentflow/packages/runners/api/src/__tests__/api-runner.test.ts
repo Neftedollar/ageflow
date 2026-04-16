@@ -319,4 +319,38 @@ describe("ApiRunner.validate", () => {
     const url = fetchMock.mock.calls[0]?.[0] as string;
     expect(url).toBe("https://example.test/v1/models");
   });
+
+  it("P2-9: user-supplied authorization header variant does not clash with Bearer token", async () => {
+    // Config supplies headers.authorization (lowercase) — must be stripped so that
+    // only the canonical Bearer token ends up in the fetch call.
+    let capturedHeaders: Record<string, string> | undefined;
+    const capturingFetch = vi
+      .fn()
+      .mockImplementation((_url: string, init: RequestInit) => {
+        capturedHeaders = init.headers as Record<string, string>;
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [{ id: "m" }] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      });
+
+    const runner = new ApiRunner({
+      baseUrl: "https://example.test/v1",
+      apiKey: "my-secret-key",
+      headers: { authorization: "user-Bearer X" },
+      fetch: capturingFetch as unknown as typeof fetch,
+    });
+
+    await runner.validate();
+
+    // Must have exactly ONE Authorization entry (case-insensitive scan)
+    const authEntries = Object.entries(capturedHeaders ?? {}).filter(
+      ([k]) => k.toLowerCase() === "authorization",
+    );
+    expect(authEntries.length).toBe(1);
+    // Must use our Bearer token, not the user-supplied value
+    expect(authEntries[0]?.[1]).toBe("Bearer my-secret-key");
+  });
 });

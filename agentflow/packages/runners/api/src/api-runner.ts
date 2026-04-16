@@ -33,11 +33,16 @@ export class ApiRunner implements Runner {
 
   async validate(): Promise<{ ok: boolean; version?: string; error?: string }> {
     try {
+      const sanitized = Object.fromEntries(
+        Object.entries(this.headers).filter(
+          ([k]) => k.toLowerCase() !== "authorization",
+        ),
+      );
       const res = await this.fetch(`${this.baseUrl}/models`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
-          ...this.headers,
+          ...sanitized,
         },
         signal: AbortSignal.timeout(this.requestTimeout),
       });

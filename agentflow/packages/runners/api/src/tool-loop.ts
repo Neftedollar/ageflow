@@ -124,12 +124,17 @@ async function postChat(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), input.requestTimeout);
   try {
+    const sanitized = Object.fromEntries(
+      Object.entries(input.headers).filter(
+        ([k]) => k.toLowerCase() !== "authorization",
+      ),
+    );
     const resp = await input.fetch(`${input.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${input.apiKey}`,
-        ...input.headers,
+        Authorization: `Bearer ${input.apiKey}`,
+        ...sanitized,
       },
       body: JSON.stringify(body),
       signal: controller.signal,
