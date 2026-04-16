@@ -369,6 +369,48 @@ describe("P1-2: AbortSignal stops executor", () => {
   });
 });
 
+describe("P2-1: task:error attempt count", () => {
+  it("emits task:error with attempt equal to max retries when all attempts fail", async () => {
+    let tries = 0;
+    const alwaysFail: Runner = {
+      validate: async () => ({ ok: true }),
+      spawn: async () => {
+        tries += 1;
+        throw new Error("subprocess always fails");
+      },
+    };
+    registerRunner("always-fail", alwaysFail);
+    try {
+      const a = defineAgent({
+        runner: "always-fail",
+        input: z.object({}),
+        output: z.object({ x: z.string() }),
+        prompt: () => "p",
+        retry: { max: 3, on: ["subprocess_error"], backoff: "fixed" },
+      });
+      const wfFail = defineWorkflow({
+        name: "fail3",
+        tasks: { t: { agent: a, input: {} } },
+      });
+      const ex = new WorkflowExecutor(wfFail);
+      const events: WorkflowEvent[] = [];
+      try {
+        for await (const ev of ex.stream({})) events.push(ev);
+      } catch {
+        // driver throws — collect events
+      }
+      const taskErr = events.find((e) => e.type === "task:error");
+      expect(taskErr).toBeDefined();
+      if (taskErr?.type === "task:error") {
+        // 3 attempts were made; attempt should be 3, not hardcoded 0
+        expect(taskErr.attempt).toBe(3);
+      }
+    } finally {
+      unregisterRunner("always-fail");
+    }
+  });
+});
+
 describe("run() is a drain over stream()", () => {
   it("produces the same WorkflowResult as draining stream()", async () => {
     const executor = new WorkflowExecutor(wf);

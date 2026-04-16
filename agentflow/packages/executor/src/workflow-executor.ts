@@ -1,4 +1,4 @@
-import { getRunner, resolveAgentDef } from "@ageflow/core";
+import { NodeMaxRetriesError, getRunner, resolveAgentDef } from "@ageflow/core";
 import type {
   AgentDef,
   CheckpointEvent,
@@ -708,6 +708,10 @@ export class WorkflowExecutor<T extends TasksMap> {
               const latencyMs = Date.now() - taskStart;
               hooks?.onTaskError?.(taskName as keyof T & string, e, latencyMs);
 
+              // Derive actual attempt count from NodeMaxRetriesError when available
+              const attemptCount =
+                err instanceof NodeMaxRetriesError ? err.attempts.length : 1;
+
               // Emit task:error event (terminal: true — retries exhausted or non-retryable)
               push({
                 type: "task:error",
@@ -720,7 +724,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                   message: e.message,
                   ...(e.stack !== undefined ? { stack: e.stack } : {}),
                 },
-                attempt: 0,
+                attempt: attemptCount,
                 terminal: true,
               });
 

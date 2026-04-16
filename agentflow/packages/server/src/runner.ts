@@ -145,7 +145,14 @@ export function createRunner(config: RunnerConfig = {}): Runner {
                 void
               >
             ).next();
-            if (!step.done) options?.onEvent?.(step.value);
+            if (!step.done) {
+              try {
+                options?.onEvent?.(step.value);
+              } catch {
+                // onEvent exceptions must not exit the drain loop — the run
+                // must still reach a terminal state so the registry TTL fires.
+              }
+            }
           } while (!step.done);
           options?.onComplete?.(step.value);
         } catch (err) {
@@ -184,7 +191,16 @@ export function createRunner(config: RunnerConfig = {}): Runner {
         const { resolve } = h.pendingCheckpoint;
         resolve(false);
       }
-      h.markCancelled();
+      // Only mark cancelled when the run is not already in a terminal state.
+      // Calling cancel() on a done/failed/cancelled run must be a no-op so the
+      // terminal result is never overwritten.
+      if (
+        h.state !== "done" &&
+        h.state !== "failed" &&
+        h.state !== "cancelled"
+      ) {
+        h.markCancelled();
+      }
     },
 
     get: (runId) => registry.get(runId),

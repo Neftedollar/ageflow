@@ -39,6 +39,7 @@ export class ApiRunner implements Runner {
           Authorization: `Bearer ${this.apiKey}`,
           ...this.headers,
         },
+        signal: AbortSignal.timeout(this.requestTimeout),
       });
       if (!res.ok) {
         return {

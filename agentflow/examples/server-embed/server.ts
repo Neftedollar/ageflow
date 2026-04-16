@@ -33,7 +33,9 @@ const server = createServer(async (req, res) => {
     try {
       for await (const ev of runner.stream(triageWorkflow, {})) {
         res.write(`data: ${JSON.stringify(ev)}\n\n`);
-        if (ev.type === "checkpoint") break;
+        // Do NOT break on checkpoint — keep draining until workflow:complete so
+        // the run reaches a terminal state. The client can POST /runs/:id/resume
+        // while the generator is suspended at the checkpoint.
       }
       res.end();
     } catch (err) {
@@ -54,7 +56,13 @@ const server = createServer(async (req, res) => {
       body += c;
     });
     req.on("end", () => {
-      const approved = JSON.parse(body).approved === true;
+      let approved: boolean;
+      try {
+        approved = JSON.parse(body).approved === true;
+      } catch {
+        res.writeHead(400).end("invalid JSON");
+        return;
+      }
       try {
         runner.resume(runId, approved);
         res.writeHead(204).end();
