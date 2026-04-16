@@ -42,7 +42,7 @@ export interface MockMcpServerOpts {
 
 export interface MockMcpServerHandle {
   /** List tools the server exposes. */
-  listTools(): Promise<{ name: string; description?: string }[]>;
+  listTools(): Promise<{ name: string; description?: string | undefined }[]>;
   /** Call a tool. Optionally race against a timeout. */
   callTool(
     name: string,
