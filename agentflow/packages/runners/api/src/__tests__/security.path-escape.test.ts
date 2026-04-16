@@ -25,8 +25,8 @@
 import { safePath } from "@ageflow/core";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { McpToolArgInvalidError } from "../mcp-tool-adapter.js";
 import type { McpClient } from "../mcp-client.js";
+import { McpToolArgInvalidError } from "../mcp-tool-adapter.js";
 import { mcpToolsToRegistry } from "../mcp-tool-adapter.js";
 import type { ChatCompletionResponse } from "../openai-types.js";
 import { runToolLoop } from "../tool-loop.js";
@@ -180,16 +180,17 @@ describe("Security: path escape via safePath refine", () => {
     ).rejects.toBeInstanceOf(McpToolArgInvalidError);
 
     // Verify error code
+    // biome-ignore lint/style/noNonNullAssertion: asserted defined above
     await readFileTool!.execute({ path: "safe/relative/path" }).catch(() => {});
     // callTool should only be called for valid paths
-    expect(callToolSpy).toHaveBeenCalledWith(
-      "read_file",
-      { path: "safe/relative/path" },
-    );
+    expect(callToolSpy).toHaveBeenCalledWith("read_file", {
+      path: "safe/relative/path",
+    });
 
     // Reset and verify traversal was rejected
     callToolSpy.mockClear();
     try {
+      // biome-ignore lint/style/noNonNullAssertion: asserted defined above
       await readFileTool!.execute({ path: "../../../etc/passwd" });
     } catch (err) {
       expect(err).toBeInstanceOf(McpToolArgInvalidError);
@@ -216,6 +217,7 @@ describe("Security: path escape via safePath refine", () => {
 
     const registry = await mcpToolsToRegistry([client]);
     // biome-ignore lint/complexity/useLiteralKeys: bracket access is clearer for double-underscore keys
+    // biome-ignore lint/style/noNonNullAssertion: index access cannot be narrowed; registry populated by mcpToolsToRegistry
     const readFileTool = registry["mcp__fs__read_file"]!;
 
     await expect(
