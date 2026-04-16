@@ -1,4 +1,9 @@
-import { defineAgent, defineWorkflow, registerRunner, unregisterRunner } from "@ageflow/core";
+import {
+  defineAgent,
+  defineWorkflow,
+  registerRunner,
+  unregisterRunner,
+} from "@ageflow/core";
 import type { Runner, WorkflowEvent } from "@ageflow/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -96,5 +101,66 @@ describe("WorkflowExecutor.stream (task failure)", () => {
     } finally {
       unregisterRunner("boom");
     }
+  });
+});
+
+describe("WorkflowExecutor.stream (task retry)", () => {
+  it("emits task:retry between transient failures", async () => {
+    let tries = 0;
+    const runner: Runner = {
+      validate: async () => ({ ok: true }),
+      spawn: async () => {
+        tries += 1;
+        if (tries < 2) throw new Error("subprocess flake");
+        return {
+          stdout: JSON.stringify({ x: "ok" }),
+          sessionHandle: "s",
+          tokensIn: 0,
+          tokensOut: 0,
+        };
+      },
+    };
+    registerRunner("flaky", runner);
+    try {
+      const a = defineAgent({
+        runner: "flaky",
+        input: z.object({}),
+        output: z.object({ x: z.string() }),
+        prompt: () => "p",
+        retry: { max: 3, on: ["subprocess_error"], backoff: "fixed" },
+      });
+      const wfy = defineWorkflow({
+        name: "r",
+        tasks: { t: { agent: a, input: {} } },
+      });
+      const ex = new WorkflowExecutor(wfy);
+      const events: WorkflowEvent[] = [];
+      for await (const ev of ex.stream({})) events.push(ev);
+      expect(events.some((e) => e.type === "task:retry")).toBe(true);
+    } finally {
+      unregisterRunner("flaky");
+    }
+  });
+});
+
+describe("run() is a drain over stream()", () => {
+  it("produces the same WorkflowResult as draining stream()", async () => {
+    const executor = new WorkflowExecutor(wf);
+    const runResult = await executor.run({});
+
+    const executor2 = new WorkflowExecutor(wf);
+    const gen = executor2.stream({});
+    let streamResult: IteratorResult<WorkflowEvent, unknown>;
+    do {
+      streamResult = await gen.next();
+    } while (!streamResult.done);
+
+    expect(runResult.outputs).toEqual(
+      (streamResult.value as { outputs: unknown }).outputs,
+    );
+    expect(runResult.metrics.taskCount).toBe(
+      (streamResult.value as { metrics: { taskCount: number } }).metrics
+        .taskCount,
+    );
   });
 });

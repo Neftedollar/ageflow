@@ -98,6 +98,7 @@ export async function runNode<
   sessionHandle?: string,
   permissions?: Record<string, boolean>,
   filteredTools?: readonly string[],
+  onRetry?: (attempt: number, reason: string) => void,
 ): Promise<
   NodeRunResult<
     import("zod").infer<
@@ -216,6 +217,9 @@ export async function runNode<
           error: errorMessage,
           errorCode,
         });
+
+        // Notify caller about the upcoming retry attempt
+        onRetry?.(attempt + 1, errorMessage);
 
         // Apply backoff before next attempt (not after last attempt)
         if (attempt < maxAttempts - 1) {

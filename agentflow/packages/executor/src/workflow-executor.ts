@@ -133,62 +133,24 @@ export class WorkflowExecutor<T extends TasksMap> {
     this.loopExecutor = new LoopExecutor(runBatchesBound);
   }
 
-  async run(_input?: unknown): Promise<WorkflowResult<T>> {
-    const { tasks, hooks } = this.workflow;
-    const workflowStart = Date.now();
-
-    // Build initial context
-    const ctx: Record<string, CtxEntry> = {};
-    const outputs: { [K in keyof T]?: unknown } = {};
-
-    // Accumulated metrics
-    let totalTokensIn = 0;
-    let totalTokensOut = 0;
-    let totalEstimatedCost = 0;
-    let taskCount = 0;
-
-    // Run all task batches
-    const results = await this._runBatches(tasks, ctx);
-
-    // Merge results into outputs
-    for (const [taskName, entry] of Object.entries(results)) {
-      outputs[taskName as keyof T] = entry.output;
-      if (entry._source === "agent") {
-        taskCount++;
-      }
-    }
-
-    // Accumulate totals from budget tracker
-    totalEstimatedCost = this.budgetTracker.total;
-
-    // We need to collect token counts from individual task results
-    // The _runBatches aggregates back into ctx — we compute totals from budgetTracker
-    // For token counts, we need to re-examine ctx
-    for (const entry of Object.values(results)) {
-      if (entry._source === "agent") {
-        const tokenEntry = entry as CtxEntry & {
-          _tokensIn?: number;
-          _tokensOut?: number;
-        };
-        totalTokensIn += tokenEntry._tokensIn ?? 0;
-        totalTokensOut += tokenEntry._tokensOut ?? 0;
-      }
-    }
-
-    const totalLatencyMs = Date.now() - workflowStart;
-
-    const metrics: WorkflowMetrics = {
-      totalLatencyMs,
-      totalTokensIn,
-      totalTokensOut,
-      totalEstimatedCost,
-      taskCount,
+  async run(input?: unknown): Promise<WorkflowResult<T>> {
+    const legacyHitlAdapter = async (ev: CheckpointEvent): Promise<boolean> => {
+      // Legacy HITL adapter: defer to HITLManager (hook-or-TTY path).
+      await this.hitlManager.runCheckpoint(
+        ev.taskName,
+        ev.message,
+        this.workflow.hooks,
+      );
+      return true;
     };
-
-    // Fire onWorkflowComplete hook
-    hooks?.onWorkflowComplete?.(outputs, metrics);
-
-    return { outputs, metrics };
+    const gen = this.stream(input, {
+      onCheckpoint: legacyHitlAdapter,
+    });
+    let result: IteratorResult<WorkflowEvent, WorkflowResult<T>>;
+    do {
+      result = await gen.next();
+    } while (!result.done);
+    return result.value;
   }
 
   /**
@@ -228,6 +190,11 @@ export class WorkflowExecutor<T extends TasksMap> {
               ? { onCheckpoint: options.onCheckpoint }
               : {}),
           },
+        );
+        // Fire onWorkflowComplete hook (was fired at end of old run())
+        this.workflow.hooks?.onWorkflowComplete?.(
+          result.outputs,
+          result.metrics,
         );
         queue.push({
           type: "workflow:complete",
@@ -558,7 +525,10 @@ export class WorkflowExecutor<T extends TasksMap> {
                   : `Task "${taskName}" requires approval before proceeding.`;
 
               // Fire onCheckpoint hook
-              hooks?.onCheckpoint?.(taskName as keyof T & string, checkpointMessage);
+              hooks?.onCheckpoint?.(
+                taskName as keyof T & string,
+                checkpointMessage,
+              );
 
               // Emit checkpoint event
               const checkpointEv: CheckpointEvent = {
@@ -612,6 +582,17 @@ export class WorkflowExecutor<T extends TasksMap> {
                 sessionHandle,
                 permissions ?? undefined,
                 filteredTools,
+                (attempt, reason) => {
+                  push({
+                    type: "task:retry",
+                    runId,
+                    workflowName,
+                    timestamp: Date.now(),
+                    taskName,
+                    attempt,
+                    reason,
+                  });
+                },
               );
 
               const latencyMs = Date.now() - taskStart;
@@ -697,11 +678,7 @@ export class WorkflowExecutor<T extends TasksMap> {
               const e = err instanceof Error ? err : new Error(String(err));
               // Fire onTaskError hook
               const latencyMs = Date.now() - taskStart;
-              hooks?.onTaskError?.(
-                taskName as keyof T & string,
-                e,
-                latencyMs,
-              );
+              hooks?.onTaskError?.(taskName as keyof T & string, e, latencyMs);
 
               // Emit task:error event (terminal: true — retries exhausted or non-retryable)
               push({
