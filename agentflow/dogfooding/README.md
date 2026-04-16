@@ -64,6 +64,23 @@ agentwf validate workflow.ts
 agentwf run workflow.ts
 ```
 
+## Expose to Claude Desktop via MCP
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "ageflow-dev-pipeline": {
+      "command": "agentwf",
+      "args": ["mcp", "serve", "/absolute/path/to/agentflow/dogfooding/workflow.ts"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. The tool `dev-pipeline` becomes available with progress streaming and HITL elicitation at the verify checkpoint.
+
 ## Difference from real orchestrator
 
 The real orchestrator in `/orchestrator` is a meta-agent that dynamically selects
