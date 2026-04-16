@@ -12,3 +12,4 @@ export type {
   SessionStore,
   ToolCallRecord,
 } from "./types.js";
+export type { ChatMessage } from "./openai-types.js";
