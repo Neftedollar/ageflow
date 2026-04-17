@@ -14,3 +14,6 @@ export type {
   ToolCallRecord,
 } from "./types.js";
 export type { ChatMessage } from "./openai-types.js";
+export type { McpClient } from "./mcp-client.js";
+export { startMcpClients, shutdownAll } from "./mcp-client.js";
+export { mcpToolsToRegistry } from "./mcp-tool-adapter.js";

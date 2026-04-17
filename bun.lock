@@ -198,11 +198,24 @@
         "zod": "^3.23.0",
       },
     },
+    "packages/runners/anthropic": {
+      "name": "@ageflow/runner-anthropic",
+      "version": "0.4.0",
+      "dependencies": {
+        "@ageflow/core": "^0.4.0",
+        "@ageflow/runner-api": "^0.3.3",
+      },
+      "devDependencies": {
+        "@types/node": "^22.0.0",
+        "vitest": "^2.1.0",
+        "zod": "^3.23.0",
+      },
+    },
     "packages/runners/api": {
       "name": "@ageflow/runner-api",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
+        "@ageflow/core": "^0.4.3",
         "@modelcontextprotocol/sdk": "^1.0.0",
       },
       "devDependencies": {
@@ -291,6 +304,8 @@
     "@ageflow/learning-sqlite": ["@ageflow/learning-sqlite@workspace:packages/learning-sqlite"],
 
     "@ageflow/mcp-server": ["@ageflow/mcp-server@workspace:packages/mcp-server"],
+
+    "@ageflow/runner-anthropic": ["@ageflow/runner-anthropic@workspace:packages/runners/anthropic"],
 
     "@ageflow/runner-api": ["@ageflow/runner-api@workspace:packages/runners/api"],
 
