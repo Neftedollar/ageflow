@@ -3,6 +3,7 @@ import { validateStaticIdentifier } from "./schemas.js";
 import type {
   AgentDef,
   AgentMcpConfig,
+  FunctionDef,
   LoopDef,
   MCPConfig,
   McpServerConfig,
@@ -55,6 +56,54 @@ export function defineAgent<
   }
 
   return config;
+}
+
+/**
+ * Define a deterministic, non-LLM function step for use in a workflow DAG.
+ *
+ * Function tasks have the same DAG semantics as agent tasks (zod validation,
+ * retry, skipIf, dependsOn, CtxFor, loop participation, event emission)
+ * but execute a plain async function — no runner, no budget, no session.
+ *
+ * @example
+ * const snapshotStep = defineFunction({
+ *   name: "snapshot",
+ *   input: z.object({ userId: z.string() }),
+ *   output: z.object({ data: z.any() }),
+ *   execute: async (input) => ({ data: await fetchData(input.userId) }),
+ * });
+ *
+ * defineWorkflow({
+ *   tasks: {
+ *     snapshot: { fn: snapshotStep, input: (ctx) => ({ userId: "u1" }) },
+ *     interpret: {
+ *       agent: interpretAgent,
+ *       dependsOn: ["snapshot"],
+ *       input: (ctx) => ({ data: ctx.snapshot.output.data }),
+ *     },
+ *   },
+ * });
+ */
+export function defineFunction<I extends ZodType, O extends ZodType>(args: {
+  name?: string;
+  input: I;
+  output: O;
+  execute: (
+    input: import("zod").infer<I>,
+    ctx?: Record<string, unknown>,
+  ) => Promise<import("zod").infer<O>>;
+}): FunctionDef<I, O> {
+  const def: FunctionDef<I, O> = {
+    _tag: "function",
+    inputSchema: args.input,
+    outputSchema: args.output,
+    execute: args.execute,
+  };
+  // exactOptionalPropertyTypes: only set when defined
+  if (args.name !== undefined) {
+    (def as { name?: string }).name = args.name;
+  }
+  return def;
 }
 
 const DEFAULT_RETRY: RetryConfig = {

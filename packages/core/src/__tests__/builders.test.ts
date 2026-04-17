@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   defineAgent,
+  defineFunction,
   defineWorkflow,
   loop,
   registerRunner,
@@ -442,5 +443,67 @@ describe("shutdownAllRunners", () => {
 
     await expect(shutdownAllRunners()).resolves.toBeUndefined();
     expect(syncThrowShutdown).toHaveBeenCalledOnce();
+  });
+});
+
+describe("defineFunction", () => {
+  it("returns correct _tag = 'function'", () => {
+    const fn = defineFunction({
+      input: z.object({ x: z.number() }),
+      output: z.object({ result: z.number() }),
+      execute: async ({ x }) => ({ result: x * 2 }),
+    });
+    expect(fn._tag).toBe("function");
+  });
+
+  it("sets inputSchema and outputSchema from input/output args", () => {
+    const inputSchema = z.object({ text: z.string() });
+    const outputSchema = z.object({ length: z.number() });
+    const fn = defineFunction({
+      input: inputSchema,
+      output: outputSchema,
+      execute: async ({ text }) => ({ length: text.length }),
+    });
+    expect(fn.inputSchema).toBe(inputSchema);
+    expect(fn.outputSchema).toBe(outputSchema);
+  });
+
+  it("stores execute function correctly", () => {
+    const executeFn = async ({ x }: { x: number }) => ({ result: x + 1 });
+    const fn = defineFunction({
+      input: z.object({ x: z.number() }),
+      output: z.object({ result: z.number() }),
+      execute: executeFn,
+    });
+    expect(fn.execute).toBe(executeFn);
+  });
+
+  it("optional name is set when provided", () => {
+    const fn = defineFunction({
+      name: "my-function",
+      input: z.object({ x: z.number() }),
+      output: z.object({ result: z.number() }),
+      execute: async ({ x }) => ({ result: x }),
+    });
+    expect(fn.name).toBe("my-function");
+  });
+
+  it("name is undefined when not provided", () => {
+    const fn = defineFunction({
+      input: z.object({ x: z.number() }),
+      output: z.object({ result: z.number() }),
+      execute: async ({ x }) => ({ result: x }),
+    });
+    expect(fn.name).toBeUndefined();
+  });
+
+  it("execute is callable and returns correct output", async () => {
+    const fn = defineFunction({
+      input: z.object({ value: z.string() }),
+      output: z.object({ upper: z.string() }),
+      execute: async ({ value }) => ({ upper: value.toUpperCase() }),
+    });
+    const result = await fn.execute({ value: "hello" });
+    expect(result.upper).toBe("HELLO");
   });
 });

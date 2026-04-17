@@ -309,12 +309,45 @@ export interface ResolvedAgentDef<
   readonly maxOutputBytes: number;
 }
 
+// ─── Function definition ──────────────────────────────────────────────────────
+
+/**
+ * Defines a deterministic, non-LLM step as a first-class DAG node.
+ *
+ * Function tasks participate in the workflow DAG identically to agent tasks:
+ * - Input is validated via `inputSchema` (Zod)
+ * - Output is validated via `outputSchema` (Zod)
+ * - `task:start`, `task:complete`, `task:error` events are emitted
+ * - `dependsOn`, `skipIf`, `RetryConfig`, and `loop` participation all work
+ *
+ * Differences from agent tasks:
+ * - No runner, no budget accounting, no session handling
+ * - `execute` is called directly (no subprocess, no LLM)
+ * - Token counts are always 0; cost is always 0
+ */
+export interface FunctionDef<
+  I extends ZodType = ZodType,
+  O extends ZodType = ZodType,
+> {
+  readonly _tag: "function";
+  readonly name?: string;
+  readonly inputSchema: I;
+  readonly outputSchema: O;
+  readonly execute: (
+    input: import("zod").infer<I>,
+    ctx?: Record<string, unknown>,
+  ) => Promise<import("zod").infer<O>>;
+}
+
 // ─── Task map types ───────────────────────────────────────────────────────────
 
 export type TasksMap = Record<
   string,
-  // biome-ignore lint/suspicious/noExplicitAny: structural constraint — any AgentDef shape
-  TaskDef<AgentDef<any, any, any>, readonly string[]> | LoopDef<TasksMap>
+  | // biome-ignore lint/suspicious/noExplicitAny: structural constraint — any AgentDef shape
+  TaskDef<AgentDef<any, any, any>, readonly string[]>
+  // biome-ignore lint/suspicious/noExplicitAny: structural constraint — any FunctionDef shape
+  | FunctionTaskDef<FunctionDef<any, any>, readonly string[]>
+  | LoopDef<TasksMap>
 >;
 
 /**
@@ -336,18 +369,24 @@ export type OutputZodOf<A> = A extends AgentDef<ZodType, infer O, string>
   : never;
 
 /**
- * Extract the typed output from an AgentDef.
+ * Extract the typed output from an AgentDef or FunctionDef.
+ * Works on both: AgentDef uses `.output`, FunctionDef uses `.outputSchema`.
  */
-export type OutputOf<A> = A extends { output: infer O extends ZodType }
+export type OutputOf<A> = A extends { outputSchema: infer O extends ZodType }
   ? import("zod").infer<O>
-  : never;
+  : A extends { output: infer O extends ZodType }
+    ? import("zod").infer<O>
+    : never;
 
 /**
- * Extract the typed input from an AgentDef.
+ * Extract the typed input from an AgentDef or FunctionDef.
+ * Works on both: AgentDef uses `.input`, FunctionDef uses `.inputSchema`.
  */
-export type InputOf<A> = A extends { input: infer I extends ZodType }
+export type InputOf<A> = A extends { inputSchema: infer I extends ZodType }
   ? import("zod").infer<I>
-  : never;
+  : A extends { input: infer I extends ZodType }
+    ? import("zod").infer<I>
+    : never;
 
 /**
  * Extract the runner brand from a task in a TasksMap.
@@ -360,6 +399,7 @@ export type RunnerOfTask<
 
 /**
  * Extract the direct dependsOn keys of task K in workflow T.
+ * Supports both TaskDef (agent tasks) and FunctionTaskDef (fn tasks).
  */
 export type DependsOnOf<
   T extends TasksMap,
@@ -370,12 +410,19 @@ export type DependsOnOf<
   infer D extends readonly string[]
 >
   ? D[number] & keyof T
-  : never;
+  : T[K] extends FunctionTaskDef<
+        // biome-ignore lint/suspicious/noExplicitAny: structural infer
+        FunctionDef<any, any>,
+        infer D extends readonly string[]
+      >
+    ? D[number] & keyof T
+    : never;
 
 /**
  * Context available inside a task's `input` function.
  * Only tasks listed in `dependsOn` are accessible.
  * Loop outputs are typed as unknown (v1 known limitation).
+ * Function task outputs are typed from their outputSchema.
  */
 export type CtxFor<T extends TasksMap, K extends keyof T> = {
   readonly [P in DependsOnOf<T, K>]: T[P] extends TaskDef<
@@ -387,16 +434,25 @@ export type CtxFor<T extends TasksMap, K extends keyof T> = {
         /** Source discriminant for executor sanitization decisions. */
         readonly _source: "agent";
       }
-    : T[P] extends LoopDef<TasksMap>
-      ? {
-          /**
-           * Loop output type is unknown in v1 (known limitation).
-           * Cast: (ctx.myLoop.output as { taskName: { field: Type } }).taskName.field
-           */
-          readonly output: unknown;
-          readonly _source: "loop";
-        }
-      : never;
+    : // biome-ignore lint/suspicious/noExplicitAny: structural infer
+      T[P] extends FunctionTaskDef<FunctionDef<any, any>, readonly string[]>
+      ? T[P] extends FunctionTaskDef<infer F, readonly string[]>
+        ? {
+            readonly output: OutputOf<F>;
+            /** Source discriminant for executor sanitization decisions. */
+            readonly _source: "function";
+          }
+        : never
+      : T[P] extends LoopDef<TasksMap>
+        ? {
+            /**
+             * Loop output type is unknown in v1 (known limitation).
+             * Cast: (ctx.myLoop.output as { taskName: { field: Type } }).taskName.field
+             */
+            readonly output: unknown;
+            readonly _source: "loop";
+          }
+        : never;
 };
 
 // ─── Task definition ──────────────────────────────────────────────────────────
@@ -466,6 +522,47 @@ export interface TaskDef<
    * Budget is NOT charged for skipped tasks.
    *
    * Errors thrown from `skipIf` surface as task errors (onTaskError is fired).
+   */
+  readonly skipIf?: (ctx: BoundCtx<D>) => boolean;
+}
+
+// ─── Function task definition ─────────────────────────────────────────────────
+
+/**
+ * A single function (non-LLM) task in a workflow.
+ *
+ * @typeParam F - FunctionDef
+ * @typeParam D - Tuple of dependsOn task keys (`as const` required for type enforcement)
+ */
+export interface FunctionTaskDef<
+  // biome-ignore lint/suspicious/noExplicitAny: structural constraint — any FunctionDef shape
+  F extends FunctionDef<any, any> = FunctionDef<any, any>,
+  D extends readonly string[] = readonly string[],
+> {
+  readonly fn: F;
+  readonly dependsOn?: D;
+  /**
+   * Static input value or a callback that receives completed prior-task outputs.
+   *
+   * Works identically to TaskDef.input but typed against FunctionDef.inputSchema.
+   */
+  readonly input?:
+    | import("zod").infer<
+        F extends { inputSchema: infer I extends ZodType } ? I : never
+      >
+    | ((
+        ctx: BoundCtx<D>,
+      ) => import("zod").infer<
+        F extends { inputSchema: infer I extends ZodType } ? I : never
+      >);
+  /**
+   * Optional retry config. Same semantics as agent tasks: retries on thrown errors.
+   */
+  readonly retry?: Partial<RetryConfig>;
+  /**
+   * Conditional skip predicate. When defined and returns `true` at runtime,
+   * the executor skips this task entirely (sets output to `undefined`).
+   * Downstream tasks still run; they receive `undefined` for this task's output.
    */
   readonly skipIf?: (ctx: BoundCtx<D>) => boolean;
 }
