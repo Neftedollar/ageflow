@@ -103,14 +103,16 @@
     },
     "packages/cli": {
       "name": "@ageflow/cli",
-      "version": "0.3.0",
+      "version": "0.4.1",
       "bin": {
         "agentwf": "./dist/bin.js",
       },
       "dependencies": {
-        "@ageflow/core": "workspace:*",
-        "@ageflow/executor": "workspace:*",
-        "@ageflow/mcp-server": "workspace:*",
+        "@ageflow/core": "^0.4.2",
+        "@ageflow/executor": "^0.3.2",
+        "@ageflow/learning": "^0.3.2",
+        "@ageflow/learning-sqlite": "^0.3.2",
+        "@ageflow/mcp-server": "^0.3.2",
         "boxen": "^8.0.0",
         "chalk": "^5.3.0",
         "commander": "^12.0.0",
@@ -124,7 +126,7 @@
     },
     "packages/core": {
       "name": "@ageflow/core",
-      "version": "0.3.0",
+      "version": "0.4.3",
       "devDependencies": {
         "@types/node": "^22.0.0",
         "vitest": "^2.1.0",
@@ -136,9 +138,9 @@
     },
     "packages/executor": {
       "name": "@ageflow/executor",
-      "version": "0.3.0",
+      "version": "0.4.2",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
+        "@ageflow/core": "^0.3.2",
         "zod-to-json-schema": "^3.23.0",
       },
       "devDependencies": {
@@ -149,9 +151,9 @@
     },
     "packages/learning": {
       "name": "@ageflow/learning",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
+        "@ageflow/core": "^0.3.2",
       },
       "devDependencies": {
         "@ageflow/executor": "workspace:*",
@@ -161,7 +163,7 @@
         "zod": "^3.23.0",
       },
       "peerDependencies": {
-        "@ageflow/executor": "workspace:*",
+        "@ageflow/executor": "^0.3.2",
       },
       "optionalPeers": [
         "@ageflow/executor",
@@ -169,9 +171,9 @@
     },
     "packages/learning-sqlite": {
       "name": "@ageflow/learning-sqlite",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "dependencies": {
-        "@ageflow/learning": "workspace:*",
+        "@ageflow/learning": "^0.3.2",
       },
       "devDependencies": {
         "@types/bun": "^1.1.0",
@@ -181,11 +183,11 @@
     },
     "packages/mcp-server": {
       "name": "@ageflow/mcp-server",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
-        "@ageflow/executor": "workspace:*",
-        "@ageflow/server": "workspace:*",
+        "@ageflow/core": "^0.3.2",
+        "@ageflow/executor": "^0.3.2",
+        "@ageflow/server": "^0.3.2",
         "@modelcontextprotocol/sdk": "^1.0.0",
         "zod-to-json-schema": "^3.23.0",
       },
@@ -196,11 +198,24 @@
         "zod": "^3.23.0",
       },
     },
+    "packages/runners/anthropic": {
+      "name": "@ageflow/runner-anthropic",
+      "version": "0.4.0",
+      "dependencies": {
+        "@ageflow/core": "^0.4.0",
+        "@ageflow/runner-api": "^0.3.2",
+      },
+      "devDependencies": {
+        "@types/node": "^22.0.0",
+        "vitest": "^2.1.0",
+        "zod": "^3.23.0",
+      },
+    },
     "packages/runners/api": {
       "name": "@ageflow/runner-api",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
+        "@ageflow/core": "^0.3.2",
         "@modelcontextprotocol/sdk": "^1.0.0",
       },
       "devDependencies": {
@@ -212,9 +227,9 @@
     },
     "packages/runners/claude": {
       "name": "@ageflow/runner-claude",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
+        "@ageflow/core": "^0.3.2",
       },
       "devDependencies": {
         "@types/bun": "^1.1.0",
@@ -224,9 +239,9 @@
     },
     "packages/runners/codex": {
       "name": "@ageflow/runner-codex",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
+        "@ageflow/core": "^0.3.2",
       },
       "devDependencies": {
         "@types/bun": "^1.1.0",
@@ -236,10 +251,10 @@
     },
     "packages/server": {
       "name": "@ageflow/server",
-      "version": "0.3.0",
+      "version": "0.4.1",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
-        "@ageflow/executor": "workspace:*",
+        "@ageflow/core": "^0.4.2",
+        "@ageflow/executor": "^0.3.2",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -249,10 +264,10 @@
     },
     "packages/testing": {
       "name": "@ageflow/testing",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
-        "@ageflow/executor": "workspace:*",
+        "@ageflow/core": "^0.3.2",
+        "@ageflow/executor": "^0.3.2",
         "@modelcontextprotocol/sdk": "^1.0.0",
       },
       "devDependencies": {
@@ -289,6 +304,8 @@
     "@ageflow/learning-sqlite": ["@ageflow/learning-sqlite@workspace:packages/learning-sqlite"],
 
     "@ageflow/mcp-server": ["@ageflow/mcp-server@workspace:packages/mcp-server"],
+
+    "@ageflow/runner-anthropic": ["@ageflow/runner-anthropic@workspace:packages/runners/anthropic"],
 
     "@ageflow/runner-api": ["@ageflow/runner-api@workspace:packages/runners/api"],
 
@@ -754,9 +771,47 @@
 
     "zod-to-json-schema": ["zod-to-json-schema@3.25.2", "", { "peerDependencies": { "zod": "^3.25.28 || ^4" } }, "sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA=="],
 
+    "@ageflow/cli/@ageflow/executor": ["@ageflow/executor@0.3.2", "", { "dependencies": { "@ageflow/core": "^0.3.2", "zod-to-json-schema": "^3.23.0" } }, "sha512-Av8dCZuVcz5IsxPEM+SWsmYIQCC6hx5v8BpYQCdNv4GgyoaN6qU5Vb81S2W0ebIv5oSu+FpAoAAXUQWMF3ag3w=="],
+
+    "@ageflow/cli/@ageflow/learning": ["@ageflow/learning@0.3.2", "", { "dependencies": { "@ageflow/core": "^0.3.2" }, "peerDependencies": { "@ageflow/executor": "^0.3.2" }, "optionalPeers": ["@ageflow/executor"] }, "sha512-TvtkwRsGEN7+8brX1XQWcg8pkyPqmxaxIRAkMbTs8/sYhtK76aWfdO+Mok3Gfj7fOQMUrY3bJ2t9OoRxW638mQ=="],
+
+    "@ageflow/cli/@ageflow/learning-sqlite": ["@ageflow/learning-sqlite@0.3.2", "", { "dependencies": { "@ageflow/learning": "^0.3.2" } }, "sha512-evd02MVCVf4ZRCCtGUOZoc92904DSQPd+KLaoPS9LQT9fguFR1hXxd3XqgPaL/YsTKjzWCAx6zHBWsp/7fQBig=="],
+
+    "@ageflow/executor/@ageflow/core": ["@ageflow/core@0.3.2", "", { "peerDependencies": { "zod": ">=3.23.0 <4.0.0" } }, "sha512-Uk5HlnB2FCL9c9+z3+RdkROaogzPcmHiH01L6P7iVAZ2AEWz9wgOa0GLGVPa14IppNhjji+aTAnwW/KisnRZuA=="],
+
+    "@ageflow/learning/@ageflow/core": ["@ageflow/core@0.3.2", "", { "peerDependencies": { "zod": ">=3.23.0 <4.0.0" } }, "sha512-Uk5HlnB2FCL9c9+z3+RdkROaogzPcmHiH01L6P7iVAZ2AEWz9wgOa0GLGVPa14IppNhjji+aTAnwW/KisnRZuA=="],
+
+    "@ageflow/learning-sqlite/@ageflow/learning": ["@ageflow/learning@0.3.2", "", { "dependencies": { "@ageflow/core": "^0.3.2" }, "peerDependencies": { "@ageflow/executor": "^0.3.2" }, "optionalPeers": ["@ageflow/executor"] }, "sha512-TvtkwRsGEN7+8brX1XQWcg8pkyPqmxaxIRAkMbTs8/sYhtK76aWfdO+Mok3Gfj7fOQMUrY3bJ2t9OoRxW638mQ=="],
+
+    "@ageflow/mcp-server/@ageflow/core": ["@ageflow/core@0.3.2", "", { "peerDependencies": { "zod": ">=3.23.0 <4.0.0" } }, "sha512-Uk5HlnB2FCL9c9+z3+RdkROaogzPcmHiH01L6P7iVAZ2AEWz9wgOa0GLGVPa14IppNhjji+aTAnwW/KisnRZuA=="],
+
+    "@ageflow/mcp-server/@ageflow/executor": ["@ageflow/executor@0.3.2", "", { "dependencies": { "@ageflow/core": "^0.3.2", "zod-to-json-schema": "^3.23.0" } }, "sha512-Av8dCZuVcz5IsxPEM+SWsmYIQCC6hx5v8BpYQCdNv4GgyoaN6qU5Vb81S2W0ebIv5oSu+FpAoAAXUQWMF3ag3w=="],
+
+    "@ageflow/mcp-server/@ageflow/server": ["@ageflow/server@0.3.2", "", { "dependencies": { "@ageflow/core": "^0.3.2", "@ageflow/executor": "^0.3.2" } }, "sha512-5v02sObQk1Wt3D8laz0MvZa3MKl6bNKzybfv57lK789rnhc4K3SvtHPT2sxi4zTzutuNIlp2SCfi9N8yKb5KAg=="],
+
+    "@ageflow/runner-api/@ageflow/core": ["@ageflow/core@0.3.2", "", { "peerDependencies": { "zod": ">=3.23.0 <4.0.0" } }, "sha512-Uk5HlnB2FCL9c9+z3+RdkROaogzPcmHiH01L6P7iVAZ2AEWz9wgOa0GLGVPa14IppNhjji+aTAnwW/KisnRZuA=="],
+
+    "@ageflow/runner-claude/@ageflow/core": ["@ageflow/core@0.3.2", "", { "peerDependencies": { "zod": ">=3.23.0 <4.0.0" } }, "sha512-Uk5HlnB2FCL9c9+z3+RdkROaogzPcmHiH01L6P7iVAZ2AEWz9wgOa0GLGVPa14IppNhjji+aTAnwW/KisnRZuA=="],
+
+    "@ageflow/runner-codex/@ageflow/core": ["@ageflow/core@0.3.2", "", { "peerDependencies": { "zod": ">=3.23.0 <4.0.0" } }, "sha512-Uk5HlnB2FCL9c9+z3+RdkROaogzPcmHiH01L6P7iVAZ2AEWz9wgOa0GLGVPa14IppNhjji+aTAnwW/KisnRZuA=="],
+
+    "@ageflow/server/@ageflow/executor": ["@ageflow/executor@0.3.2", "", { "dependencies": { "@ageflow/core": "^0.3.2", "zod-to-json-schema": "^3.23.0" } }, "sha512-Av8dCZuVcz5IsxPEM+SWsmYIQCC6hx5v8BpYQCdNv4GgyoaN6qU5Vb81S2W0ebIv5oSu+FpAoAAXUQWMF3ag3w=="],
+
+    "@ageflow/testing/@ageflow/core": ["@ageflow/core@0.3.2", "", { "peerDependencies": { "zod": ">=3.23.0 <4.0.0" } }, "sha512-Uk5HlnB2FCL9c9+z3+RdkROaogzPcmHiH01L6P7iVAZ2AEWz9wgOa0GLGVPa14IppNhjji+aTAnwW/KisnRZuA=="],
+
+    "@ageflow/testing/@ageflow/executor": ["@ageflow/executor@0.3.2", "", { "dependencies": { "@ageflow/core": "^0.3.2", "zod-to-json-schema": "^3.23.0" } }, "sha512-Av8dCZuVcz5IsxPEM+SWsmYIQCC6hx5v8BpYQCdNv4GgyoaN6qU5Vb81S2W0ebIv5oSu+FpAoAAXUQWMF3ag3w=="],
+
     "ansi-align/string-width": ["string-width@4.2.3", "", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, "sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g=="],
 
     "log-symbols/is-unicode-supported": ["is-unicode-supported@1.3.0", "", {}, "sha512-43r2mRvz+8JRIKnWJ+3j8JtjRKZ6GmjzfaE/qiBJnikNnYv/6bagRJ1kUhNk8R5EX/GkobD+r+sfxCPJsiKBLQ=="],
+
+    "@ageflow/cli/@ageflow/executor/@ageflow/core": ["@ageflow/core@0.3.2", "", { "peerDependencies": { "zod": ">=3.23.0 <4.0.0" } }, "sha512-Uk5HlnB2FCL9c9+z3+RdkROaogzPcmHiH01L6P7iVAZ2AEWz9wgOa0GLGVPa14IppNhjji+aTAnwW/KisnRZuA=="],
+
+    "@ageflow/cli/@ageflow/learning/@ageflow/core": ["@ageflow/core@0.3.2", "", { "peerDependencies": { "zod": ">=3.23.0 <4.0.0" } }, "sha512-Uk5HlnB2FCL9c9+z3+RdkROaogzPcmHiH01L6P7iVAZ2AEWz9wgOa0GLGVPa14IppNhjji+aTAnwW/KisnRZuA=="],
+
+    "@ageflow/learning-sqlite/@ageflow/learning/@ageflow/core": ["@ageflow/core@0.3.2", "", { "peerDependencies": { "zod": ">=3.23.0 <4.0.0" } }, "sha512-Uk5HlnB2FCL9c9+z3+RdkROaogzPcmHiH01L6P7iVAZ2AEWz9wgOa0GLGVPa14IppNhjji+aTAnwW/KisnRZuA=="],
+
+    "@ageflow/server/@ageflow/executor/@ageflow/core": ["@ageflow/core@0.3.2", "", { "peerDependencies": { "zod": ">=3.23.0 <4.0.0" } }, "sha512-Uk5HlnB2FCL9c9+z3+RdkROaogzPcmHiH01L6P7iVAZ2AEWz9wgOa0GLGVPa14IppNhjji+aTAnwW/KisnRZuA=="],
 
     "ansi-align/string-width/emoji-regex": ["emoji-regex@8.0.0", "", {}, "sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A=="],
 
