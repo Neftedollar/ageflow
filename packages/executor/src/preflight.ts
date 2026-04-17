@@ -62,6 +62,11 @@ function validateRunners(
       continue;
     }
 
+    // FunctionTaskDef — no runner, skip runner validation
+    if ("fn" in task) {
+      continue;
+    }
+
     const runnerName = task.agent.runner;
     if (seen.has(runnerName)) {
       continue;
@@ -130,6 +135,11 @@ function validateStaticArgs(tasks: TasksMap, errors: string[]): void {
       continue;
     }
 
+    // FunctionTaskDef — no agent-specific args to validate
+    if ("fn" in task) {
+      continue;
+    }
+
     const agent = task.agent;
 
     // Validate runner identifier
@@ -185,6 +195,11 @@ function validateEnvVars(tasks: TasksMap, warnings: string[]): void {
       continue;
     }
 
+    // FunctionTaskDef — no agent env vars
+    if ("fn" in task) {
+      continue;
+    }
+
     const agent = task.agent;
     if (agent.env?.pass === undefined) {
       continue;
@@ -216,6 +231,11 @@ function validateCrossProviderSessions(
 
   for (const [taskName, task] of Object.entries(tasks)) {
     if (task === undefined || "kind" in task) {
+      continue;
+    }
+
+    // FunctionTaskDef — no session, skip
+    if ("fn" in task) {
       continue;
     }
 
@@ -276,6 +296,11 @@ function validateMcpConfigs(
 
   for (const [taskName, task] of Object.entries(tasks)) {
     if (task === undefined || "kind" in task) {
+      continue;
+    }
+
+    // FunctionTaskDef — no MCP config
+    if ("fn" in task) {
       continue;
     }
 
@@ -343,7 +368,8 @@ function warnAllDepsSkippable(tasks: TasksMap, warnings: string[]): void {
     const allSkippable = deps.every((depName) => {
       const depTask = tasks[depName];
       if (depTask === undefined || "kind" in depTask) return false;
-      return depTask.skipIf !== undefined;
+      // Both TaskDef (agent) and FunctionTaskDef support skipIf
+      return (depTask as { skipIf?: unknown }).skipIf !== undefined;
     });
 
     if (allSkippable) {

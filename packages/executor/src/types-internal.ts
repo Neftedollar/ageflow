@@ -19,5 +19,5 @@ export type RunBatchesFn = (
  */
 export interface CtxEntry {
   output: unknown;
-  _source: "agent" | "loop" | "skipped";
+  _source: "agent" | "function" | "loop" | "skipped";
 }

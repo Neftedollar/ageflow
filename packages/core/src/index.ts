@@ -13,6 +13,8 @@ export type {
   CheckpointEvent,
   CtxFor,
   DependsOnOf,
+  FunctionDef,
+  FunctionTaskDef,
   HITLConfig,
   HITLMode,
   InputOf,
@@ -58,6 +60,7 @@ export type {
 // Builders
 export {
   defineAgent,
+  defineFunction,
   defineWorkflow,
   getRunner,
   getRunners,

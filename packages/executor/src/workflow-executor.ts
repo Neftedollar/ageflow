@@ -1,7 +1,11 @@
 import { NodeMaxRetriesError, getRunner, resolveAgentDef } from "@ageflow/core";
 import type {
   AgentDef,
+  AttemptRecord,
   CheckpointEvent,
+  FunctionDef,
+  FunctionTaskDef,
+  RetryConfig,
   TaskDef,
   TaskMetrics,
   TasksMap,
@@ -114,6 +118,102 @@ function groupBySession(
   }
 
   return groups;
+}
+
+// ─── Default retry config for function tasks ───────────────────────────────────
+
+const DEFAULT_FN_RETRY: RetryConfig = {
+  max: 1,
+  on: [],
+  backoff: "fixed",
+};
+
+// ─── Function task runner (with retry) ────────────────────────────────────────
+
+/**
+ * Run a function task with retry logic.
+ * Validates input via inputSchema, calls execute(), validates output via outputSchema.
+ *
+ * Retry behavior:
+ * - Input/output Zod validation errors are never retried (they indicate a programming
+ *   error, not a transient failure).
+ * - Errors thrown from execute() are retried up to retry.max times.
+ *   retry.on is NOT checked for fn tasks — RetryErrorKind values (subprocess_error,
+ *   output_validation_error, timeout, etc.) are agent/runner-specific and do not
+ *   apply to deterministic in-process functions. fn tasks retry on ANY thrown error
+ *   from execute(), regardless of retry.on.
+ * - On exhaustion, throws NodeMaxRetriesError with the full attempts array so the
+ *   executor can report the correct attempt count in hooks and events.
+ */
+async function runFunctionTask<
+  // biome-ignore lint/suspicious/noExplicitAny: structural constraint
+  F extends FunctionDef<any, any>,
+>(
+  fnDef: F,
+  // biome-ignore lint/suspicious/noExplicitAny: structural constraint
+  resolvedInput: any,
+  retry: RetryConfig,
+  taskName: string,
+  onRetry?: (attempt: number, reason: string) => void,
+  // biome-ignore lint/suspicious/noExplicitAny: structural constraint
+): Promise<{ output: any; latencyMs: number; retries: number }> {
+  const maxAttempts = retry.max;
+  const startTime = Date.now();
+
+  // Validate input through Zod security boundary — never retried
+  const parsedInput = fnDef.inputSchema.safeParse(resolvedInput);
+  if (!parsedInput.success) {
+    throw new Error(
+      `[agentflow] Function task "${taskName}" input validation failed: ${parsedInput.error.message}`,
+    );
+  }
+
+  const attemptRecords: AttemptRecord[] = [];
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const rawOutput = await fnDef.execute(parsedInput.data);
+
+      // Validate output through Zod security boundary — never retried
+      const parsedOutput = fnDef.outputSchema.safeParse(rawOutput);
+      if (!parsedOutput.success) {
+        throw new Error(
+          `[agentflow] Function task "${taskName}" output validation failed: ${parsedOutput.error.message}`,
+        );
+      }
+
+      const latencyMs = Date.now() - startTime;
+      return { output: parsedOutput.data, latencyMs, retries: attempt };
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err));
+
+      // Zod validation errors (input/output) are never retried
+      const isValidationError =
+        e.message.includes("input validation failed") ||
+        e.message.includes("output validation failed");
+      if (isValidationError) {
+        throw e;
+      }
+
+      // Record this attempt
+      attemptRecords.push({
+        attempt,
+        error: e.message,
+        // fn tasks have no runner-specific error kind — use a stable sentinel
+        // biome-ignore lint/suspicious/noExplicitAny: fn tasks use non-standard error kind
+        errorCode: "subprocess_error" as any,
+      });
+
+      if (attempt < maxAttempts - 1) {
+        onRetry?.(attempt + 1, e.message);
+        // No backoff for function tasks — they're in-process calls
+      }
+    }
+  }
+
+  // All attempts exhausted — throw NodeMaxRetriesError so the executor can
+  // report the correct attempt count in hooks (onTaskError) and events (task:error).
+  throw new NodeMaxRetriesError(taskName, attemptRecords);
 }
 
 export class WorkflowExecutor<T extends TasksMap> {
@@ -299,6 +399,92 @@ export class WorkflowExecutor<T extends TasksMap> {
                 taskName,
               );
               ctx[taskName] = { output: loopOutput, _source: "loop" };
+              continue;
+            }
+
+            // Dispatch FunctionTaskDef ({fn: ...}) — non-LLM deterministic step
+            if ("fn" in taskDef) {
+              // biome-ignore lint/suspicious/noExplicitAny: structural constraint
+              const fnTask = taskDef as FunctionTaskDef<FunctionDef<any, any>>;
+
+              // Evaluate skipIf predicate
+              if (fnTask.skipIf !== undefined) {
+                let shouldSkip: boolean;
+                try {
+                  shouldSkip = (
+                    fnTask.skipIf as (ctx: Record<string, CtxEntry>) => boolean
+                  )(ctx);
+                } catch (err) {
+                  const e = err instanceof Error ? err : new Error(String(err));
+                  hooks?.onTaskError?.(taskName as keyof T & string, e, 0);
+                  throw e;
+                }
+                if (shouldSkip) {
+                  ctx[taskName] = { output: undefined, _source: "skipped" };
+                  hooks?.onTaskSkip?.(taskName as keyof T & string, "skipIf");
+                  continue;
+                }
+              }
+
+              // Resolve input
+              let fnResolvedInput: unknown;
+              if (typeof fnTask.input === "function") {
+                fnResolvedInput = (
+                  fnTask.input as (ctx: Record<string, CtxEntry>) => unknown
+                )(ctx);
+              } else {
+                fnResolvedInput = fnTask.input;
+              }
+
+              const fnRetry: RetryConfig = {
+                max: fnTask.retry?.max ?? DEFAULT_FN_RETRY.max,
+                on: fnTask.retry?.on ?? DEFAULT_FN_RETRY.on,
+                backoff: fnTask.retry?.backoff ?? DEFAULT_FN_RETRY.backoff,
+              };
+
+              // Fire onTaskStart hook
+              hooks?.onTaskStart?.(taskName as keyof T & string);
+
+              try {
+                const fnResult = await runFunctionTask(
+                  fnTask.fn,
+                  fnResolvedInput,
+                  fnRetry,
+                  taskName,
+                );
+
+                ctx[taskName] = {
+                  output: fnResult.output,
+                  _source: "function",
+                };
+
+                const fnMetrics: TaskMetrics = {
+                  tokensIn: 0,
+                  tokensOut: 0,
+                  latencyMs: fnResult.latencyMs,
+                  retries: fnResult.retries,
+                  estimatedCost: 0,
+                };
+
+                hooks?.onTaskComplete?.(
+                  taskName as keyof T & string,
+                  fnResult.output,
+                  fnMetrics,
+                );
+              } catch (err) {
+                if (err instanceof Error) {
+                  const attemptCount =
+                    err instanceof NodeMaxRetriesError
+                      ? err.attempts.length
+                      : 1;
+                  hooks?.onTaskError?.(
+                    taskName as keyof T & string,
+                    err,
+                    attemptCount,
+                  );
+                }
+                throw err;
+              }
               continue;
             }
 
@@ -545,6 +731,153 @@ export class WorkflowExecutor<T extends TasksMap> {
                 taskName,
               );
               ctx[taskName] = { output: loopOutput, _source: "loop" };
+              continue;
+            }
+
+            // Dispatch FunctionTaskDef ({fn: ...}) — non-LLM deterministic step
+            if ("fn" in taskDef) {
+              // biome-ignore lint/suspicious/noExplicitAny: structural constraint
+              const fnTask = taskDef as FunctionTaskDef<FunctionDef<any, any>>;
+
+              // Evaluate skipIf predicate
+              if (fnTask.skipIf !== undefined) {
+                let shouldSkip: boolean;
+                try {
+                  shouldSkip = (
+                    fnTask.skipIf as (ctx: Record<string, CtxEntry>) => boolean
+                  )(ctx);
+                } catch (err) {
+                  const e = err instanceof Error ? err : new Error(String(err));
+                  hooks?.onTaskError?.(taskName as keyof T & string, e, 0);
+                  push({
+                    type: "task:error",
+                    runId,
+                    workflowName,
+                    timestamp: Date.now(),
+                    taskName,
+                    error: {
+                      name: e.name,
+                      message: e.message,
+                      ...(e.stack !== undefined ? { stack: e.stack } : {}),
+                    },
+                    attempt: 0,
+                    terminal: true,
+                  });
+                  throw e;
+                }
+                if (shouldSkip) {
+                  ctx[taskName] = { output: undefined, _source: "skipped" };
+                  hooks?.onTaskSkip?.(taskName as keyof T & string, "skipIf");
+                  push({
+                    type: "task:skip",
+                    runId,
+                    workflowName,
+                    timestamp: Date.now(),
+                    taskName,
+                    reason: "skipIf",
+                  });
+                  continue;
+                }
+              }
+
+              // Resolve input
+              let fnResolvedInput: unknown;
+              if (typeof fnTask.input === "function") {
+                fnResolvedInput = (
+                  fnTask.input as (ctx: Record<string, CtxEntry>) => unknown
+                )(ctx);
+              } else {
+                fnResolvedInput = fnTask.input;
+              }
+
+              const fnRetry: RetryConfig = {
+                max: fnTask.retry?.max ?? DEFAULT_FN_RETRY.max,
+                on: fnTask.retry?.on ?? DEFAULT_FN_RETRY.on,
+                backoff: fnTask.retry?.backoff ?? DEFAULT_FN_RETRY.backoff,
+              };
+
+              // Fire onTaskStart hook + emit task:start event
+              hooks?.onTaskStart?.(taskName as keyof T & string);
+              push({
+                type: "task:start",
+                runId,
+                workflowName,
+                timestamp: Date.now(),
+                taskName,
+              });
+
+              try {
+                const fnResult = await runFunctionTask(
+                  fnTask.fn,
+                  fnResolvedInput,
+                  fnRetry,
+                  taskName,
+                  (attempt, reason) => {
+                    push({
+                      type: "task:retry",
+                      runId,
+                      workflowName,
+                      timestamp: Date.now(),
+                      taskName,
+                      attempt,
+                      reason,
+                    });
+                  },
+                );
+
+                ctx[taskName] = {
+                  output: fnResult.output,
+                  _source: "function",
+                };
+                taskCount++;
+
+                const fnMetrics: TaskMetrics = {
+                  tokensIn: 0,
+                  tokensOut: 0,
+                  latencyMs: fnResult.latencyMs,
+                  retries: fnResult.retries,
+                  estimatedCost: 0,
+                };
+
+                hooks?.onTaskComplete?.(
+                  taskName as keyof T & string,
+                  fnResult.output,
+                  fnMetrics,
+                );
+                push({
+                  type: "task:complete",
+                  runId,
+                  workflowName,
+                  timestamp: Date.now(),
+                  taskName,
+                  output: fnResult.output,
+                  metrics: fnMetrics,
+                });
+              } catch (err) {
+                const e = err instanceof Error ? err : new Error(String(err));
+                const attemptCount =
+                  err instanceof NodeMaxRetriesError ? err.attempts.length : 1;
+                hooks?.onTaskError?.(
+                  taskName as keyof T & string,
+                  e,
+                  attemptCount,
+                );
+                push({
+                  type: "task:error",
+                  runId,
+                  workflowName,
+                  timestamp: Date.now(),
+                  taskName,
+                  error: {
+                    name: e.name,
+                    message: e.message,
+                    ...(e.stack !== undefined ? { stack: e.stack } : {}),
+                  },
+                  attempt: attemptCount,
+                  terminal: true,
+                });
+                throw e;
+              }
               continue;
             }
 

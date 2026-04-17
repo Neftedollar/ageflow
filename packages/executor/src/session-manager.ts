@@ -80,8 +80,8 @@ export class SessionManager {
     const taskDef = tasks[taskName];
     if (taskDef === undefined) return undefined;
 
-    // LoopDef has no session field
-    if ("kind" in taskDef) return undefined;
+    // LoopDef and FunctionTaskDef have no session field
+    if ("kind" in taskDef || "fn" in taskDef) return undefined;
 
     const session = taskDef.session;
     if (session === undefined) return undefined;
@@ -112,6 +112,7 @@ export class SessionManager {
     if (
       targetDef === undefined ||
       "kind" in targetDef ||
+      "fn" in targetDef ||
       targetDef.session === undefined
     ) {
       throw new UnresolvedSessionRefError(taskName, targetTaskName);
