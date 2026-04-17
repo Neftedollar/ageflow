@@ -119,7 +119,7 @@ const wf = defineWorkflow({
 
 - No runner, no token usage, no budget accounting — cost metrics are always 0.
 - No session — fn tasks cannot participate in session sharing.
-- Retries: fn tasks retry on any thrown error from `execute()`. `retry.on` is not consulted — `RetryErrorKind` values are runner/agent-specific and do not apply to in-process functions. Input and output Zod validation errors are never retried.
+- Retries: fn tasks honor `retry.on` the same as agent tasks. Errors from `execute()` are classified as `"transient"` (generic) or `"timeout"` (`TimeoutError`). To retry, include the matching kind in `retry.on` (e.g. `on: ["transient"]`). Zod validation errors (input or output) never retry regardless of config — the data contract is wrong and retrying won't fix it.
 - Preflight: agent-specific checks (runner brand, session cross-provider, MCP config) skip fn tasks. Topology checks still apply.
 
 ### `sessionToken(name, runner)`
