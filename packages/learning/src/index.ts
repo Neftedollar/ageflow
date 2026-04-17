@@ -29,3 +29,21 @@ export { shouldRollback, updateScore } from "./scoring.js";
 // Hooks
 export { createLearningHooks } from "./hooks.js";
 export type { CreateLearningHooksOptions } from "./hooks.js";
+
+// Workflows
+export {
+  creditAssignmentAgent,
+  generateSkillDraftsAgent,
+  reflectionWorkflow,
+  runReflection,
+  CreditResultSchema,
+  SkillDraftSchema,
+  GenerateSkillDraftsOutputSchema,
+} from "./workflows/reflection.js";
+export type {
+  CreditResult,
+  SkillDraft,
+  GenerateSkillDraftsOutput,
+  ReflectionInput,
+  ReflectionSummary,
+} from "./workflows/reflection.js";
