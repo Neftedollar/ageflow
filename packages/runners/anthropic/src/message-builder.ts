@@ -41,12 +41,18 @@ export function buildAnthropicMessages(
 /**
  * Convert the subset of the runner's tool registry named in `names` into
  * Anthropic tool schemas. Unknown names are ignored.
+ *
+ * Semantics:
+ *  - `names === undefined` → no restriction; returns undefined (caller passes no `tools` key)
+ *  - `names === []`        → explicit deny-all; returns [] (zero schemas — no tools available)
+ *  - `names.length > 0`   → allowlist; returns matching schemas
  */
 export function toolsToAnthropicSchemas(
   registry: ToolRegistry,
   names: readonly string[] | undefined,
 ): AnthropicToolSchema[] | undefined {
-  if (!names || names.length === 0) return undefined;
+  if (names === undefined) return undefined;
+  if (names.length === 0) return [];
   const out: AnthropicToolSchema[] = [];
   for (const name of names) {
     const def = registry[name];
@@ -65,5 +71,5 @@ export function toolsToAnthropicSchemas(
       input_schema: inputSchema,
     });
   }
-  return out.length > 0 ? out : undefined;
+  return out;
 }

@@ -168,52 +168,92 @@ export async function runNode<
 
       const perCallInlineTools = overridesForRunner?.tools;
 
-      // Build the merged inline map that goes into spawnArgs.inlineTools
+      // ── String[] allowlist for tools ────────────────────────────────────────
+      // Step 1: Build the base allowlist from the agent definition (no HITL yet).
+      let baseToolNames: readonly string[] | undefined;
+      if (Array.isArray(resolvedDef.tools)) {
+        baseToolNames = resolvedDef.tools as readonly string[];
+      } else if (resolvedDef.tools !== undefined) {
+        // Inline map — keys are the allowlist
+        baseToolNames = Object.keys(
+          resolvedDef.tools as Record<string, InlineToolDef>,
+        );
+      }
+
+      // Step 2: Merge per-call inline tool names into the candidate set BEFORE
+      // HITL filtering.  Per-call names are only allowed through if HITL permits
+      // them (i.e. their name appears in filteredTools).
+      const perCallNames =
+        perCallInlineTools !== undefined ? Object.keys(perCallInlineTools) : [];
+
+      // Candidate set: agent tools + per-call tools (deduped)
+      let candidateToolNames: readonly string[] | undefined;
+      if (baseToolNames !== undefined || perCallNames.length > 0) {
+        const seen = new Set<string>(baseToolNames ?? []);
+        for (const n of perCallNames) {
+          seen.add(n);
+        }
+        candidateToolNames = [...seen];
+      }
+
+      // Step 3: Apply HITL filter.
+      // - If filteredTools is defined (HITL mode = permissions), it is the
+      //   authoritative set.  Any candidate not in filteredTools is dropped —
+      //   including per-call overrides.  An empty filteredTools means deny-all.
+      // - If filteredTools is undefined (no HITL), all candidates pass.
+      let effectiveToolNames: readonly string[] | undefined;
+      if (filteredTools !== undefined) {
+        // HITL is active: intersect candidates with the HITL-approved set.
+        // candidateToolNames may be undefined when the agent has no tools; in
+        // that case effectiveToolNames takes the HITL value directly (which may
+        // be [] — deny-all).
+        const hitlSet = new Set<string>(filteredTools);
+        if (candidateToolNames !== undefined) {
+          effectiveToolNames = candidateToolNames.filter((n) => hitlSet.has(n));
+        } else {
+          // No agent/per-call tools — HITL provides the allowlist (may be []).
+          effectiveToolNames = filteredTools;
+        }
+      } else {
+        effectiveToolNames = candidateToolNames;
+      }
+
+      // Step 4: Build inlineTools map filtered to effectiveToolNames.
+      // Only include inline defs whose names survived HITL filtering.
       let mergedInlineTools:
         | Readonly<Record<string, InlineToolDef>>
         | undefined;
       if (agentInlineTools !== undefined || perCallInlineTools !== undefined) {
-        mergedInlineTools = {
+        const unfiltered: Record<string, InlineToolDef> = {
           ...(agentInlineTools ?? {}),
           ...(perCallInlineTools ?? {}),
         };
+        if (effectiveToolNames !== undefined) {
+          const allowed = new Set<string>(effectiveToolNames);
+          const filtered: Record<string, InlineToolDef> = {};
+          for (const [name, def] of Object.entries(unfiltered)) {
+            if (allowed.has(name)) {
+              filtered[name] = def;
+            }
+          }
+          mergedInlineTools =
+            Object.keys(filtered).length > 0 ? filtered : undefined;
+        } else {
+          mergedInlineTools = unfiltered;
+        }
       }
 
       if (mergedInlineTools !== undefined) {
         spawnArgs.inlineTools = mergedInlineTools;
       }
 
-      // ── String[] allowlist for tools ────────────────────────────────────────
-      // If filteredTools (HITL) is provided, use it.
-      // Otherwise: if agent tools is string[], use that; if inline map, use its keys.
-      // If per-call inline tools exist, append their names to the allowlist.
-      let effectiveToolNames: readonly string[] | undefined;
-      if (filteredTools !== undefined) {
-        // HITL-filtered — already a string[]
-        effectiveToolNames = filteredTools;
-      } else if (Array.isArray(resolvedDef.tools)) {
-        effectiveToolNames = resolvedDef.tools as readonly string[];
-      } else if (resolvedDef.tools !== undefined) {
-        // Inline map — keys are the allowlist
-        effectiveToolNames = Object.keys(
-          resolvedDef.tools as Record<string, InlineToolDef>,
-        );
-      }
-
-      // Merge per-call inline tool names into allowlist
-      if (
-        perCallInlineTools !== undefined &&
-        Object.keys(perCallInlineTools).length > 0
-      ) {
-        const perCallNames = Object.keys(perCallInlineTools);
-        if (effectiveToolNames !== undefined) {
-          effectiveToolNames = [...effectiveToolNames, ...perCallNames];
-        } else {
-          effectiveToolNames = perCallNames;
-        }
-      }
-
-      if (effectiveToolNames !== undefined && effectiveToolNames.length > 0) {
+      // Step 5: Set tools allowlist.
+      // SECURITY: always set spawnArgs.tools when effectiveToolNames is defined —
+      // even when the list is empty (deny-all).  Skipping the assignment when
+      // length === 0 would leave the runner without a tools constraint, causing
+      // it to default to "all tools available" and silently turning a deny-all
+      // into an allow-all.
+      if (effectiveToolNames !== undefined) {
         spawnArgs.tools = effectiveToolNames;
       }
 

@@ -63,11 +63,13 @@ describe("toolsToAnthropicSchemas", () => {
     },
   };
 
-  it("returns undefined when names is empty", () => {
-    expect(toolsToAnthropicSchemas(registry, [])).toBeUndefined();
+  it("returns [] (not undefined) when names is [] — explicit deny-all (#160)", () => {
+    // Empty array = explicit deny-all. Must NOT return undefined (which means
+    // "no restriction"), otherwise runners would fall back to all tools.
+    expect(toolsToAnthropicSchemas(registry, [])).toEqual([]);
   });
 
-  it("returns undefined when names is undefined", () => {
+  it("returns undefined when names is undefined (no restriction)", () => {
     expect(toolsToAnthropicSchemas(registry, undefined)).toBeUndefined();
   });
 
@@ -86,8 +88,11 @@ describe("toolsToAnthropicSchemas", () => {
     expect(schemas?.[0]?.name).toBe("echo");
   });
 
-  it("returns undefined when all names are unknown", () => {
-    expect(toolsToAnthropicSchemas(registry, ["unknown"])).toBeUndefined();
+  it("returns empty array (not undefined) when all names are unknown (#160)", () => {
+    // The caller provided an explicit allowlist — all names happen to be
+    // unknown in the registry.  Must return [] (not undefined) so the
+    // deny-all semantics are preserved.
+    expect(toolsToAnthropicSchemas(registry, ["unknown"])).toEqual([]);
   });
 
   it("tool schema has input_schema with type: object", () => {
