@@ -23,6 +23,7 @@ import {
 import { HITLManager } from "./hitl-manager.js";
 import { LoopExecutor } from "./loop-executor.js";
 import { runNode } from "./node-runner.js";
+import { classifyFnError } from "./retry-classify.js";
 import { SessionManager } from "./session-manager.js";
 import type { CtxEntry, RunBatchesFn } from "./types-internal.js";
 
@@ -135,15 +136,14 @@ const DEFAULT_FN_RETRY: RetryConfig = {
  * Validates input via inputSchema, calls execute(), validates output via outputSchema.
  *
  * Retry behavior:
- * - Input/output Zod validation errors are never retried (they indicate a programming
- *   error, not a transient failure).
- * - Errors thrown from execute() are retried up to retry.max times.
- *   retry.on is NOT checked for fn tasks — RetryErrorKind values (subprocess_error,
- *   output_validation_error, timeout, etc.) are agent/runner-specific and do not
- *   apply to deterministic in-process functions. fn tasks retry on ANY thrown error
- *   from execute(), regardless of retry.on.
- * - On exhaustion, throws NodeMaxRetriesError with the full attempts array so the
- *   executor can report the correct attempt count in hooks and events.
+ * - Input/output Zod validation errors are never retried (classified as "validation").
+ *   They indicate a data contract violation; retrying won't fix it.
+ * - Errors thrown from execute() are classified (see classifyFnError) and checked
+ *   against retry.on before retrying — same semantics as agent tasks.
+ *   If retry.on is empty ([]) no errors are retried regardless of retry.max.
+ * - On exhaustion (or a non-retryable error kind), throws NodeMaxRetriesError with
+ *   the full attempts array so the executor can report the correct attempt count
+ *   in hooks and events.
  */
 async function runFunctionTask<
   // biome-ignore lint/suspicious/noExplicitAny: structural constraint
@@ -187,7 +187,7 @@ async function runFunctionTask<
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
 
-      // Zod validation errors (input/output) are never retried
+      // Zod validation errors (input/output) are never retried — data is wrong
       const isValidationError =
         e.message.includes("input validation failed") ||
         e.message.includes("output validation failed");
@@ -195,14 +195,17 @@ async function runFunctionTask<
         throw e;
       }
 
-      // Record this attempt
-      attemptRecords.push({
-        attempt,
-        error: e.message,
-        // fn tasks have no runner-specific error kind — use a stable sentinel
-        // biome-ignore lint/suspicious/noExplicitAny: fn tasks use non-standard error kind
-        errorCode: "subprocess_error" as any,
-      });
+      // Classify the error and check retry.on — same semantics as agent tasks
+      const errorCode = classifyFnError(e);
+      if (!retry.on.includes(errorCode)) {
+        // Error kind not in retry list — throw immediately without consuming attempts
+        // Wrap as NodeMaxRetriesError so onTaskError gets attempt count = 1
+        attemptRecords.push({ attempt, error: e.message, errorCode });
+        throw new NodeMaxRetriesError(taskName, attemptRecords);
+      }
+
+      // Error is retryable — record this attempt
+      attemptRecords.push({ attempt, error: e.message, errorCode });
 
       if (attempt < maxAttempts - 1) {
         onRetry?.(attempt + 1, e.message);

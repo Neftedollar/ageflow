@@ -11,7 +11,18 @@ export type RetryErrorKind =
   | "provider_unavailable"
   | "budget_exceeded"
   | "agent_hitl_conflict"
-  | "mcp_server_start_failed";
+  | "mcp_server_start_failed"
+  /**
+   * Generic transient error from an in-process function task (`{fn: ...}`).
+   * Thrown by `execute()` that is not a Zod validation error.
+   * Consult `retry.on` to decide whether to retry.
+   */
+  | "transient"
+  /**
+   * Zod input or output validation error on a function task (`{fn: ...}`).
+   * Never retried — the data contract is wrong, retrying won't fix it.
+   */
+  | "validation";
 
 // ─── Config types ─────────────────────────────────────────────────────────────
 
@@ -555,15 +566,18 @@ export interface FunctionTaskDef<
         F extends { inputSchema: infer I extends ZodType } ? I : never
       >);
   /**
-   * Optional retry config. fn tasks retry on any thrown error from `execute()`.
+   * Optional retry config. Fn tasks honor `retry.on` identically to agent tasks.
    *
-   * `retry.on` is NOT consulted — `RetryErrorKind` values (subprocess_error,
-   * output_validation_error, timeout, etc.) are runner/agent-specific concepts
-   * that do not apply to deterministic in-process functions. Set `max` to control
-   * the number of attempts; set `on` to any value or leave it empty — it has no
-   * effect on fn-task retry decisions.
+   * Error classification for fn tasks:
+   * - `"transient"` — any `Error` thrown from `execute()` that is not a Zod validation error
+   * - `"timeout"` — `TimeoutError` thrown from `execute()` (if the fn imposes its own timeout)
+   * - `"validation"` — Zod input/output validation error; **never retried** regardless of `retry.on`
    *
-   * Input and output Zod validation errors are never retried regardless of config.
+   * If `retry.on` is empty (`[]`), no errors are retried (single attempt).
+   * To retry transient errors: `retry: { max: 3, on: ["transient"], backoff: "fixed" }`.
+   *
+   * Zod input and output validation errors are **always** non-retryable — the data
+   * contract is wrong and retrying will not fix it.
    */
   readonly retry?: Partial<RetryConfig>;
   /**

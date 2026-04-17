@@ -334,7 +334,7 @@ describe("function node — skipIf", () => {
 });
 
 describe("function node — retry", () => {
-  it("retries on thrown error per retry config", async () => {
+  it("retries on thrown error when error kind is in retry.on", async () => {
     let callCount = 0;
     const flakyFn = defineFunction({
       input: z.object({ x: z.number() }),
@@ -354,7 +354,8 @@ describe("function node — retry", () => {
         step: {
           fn: flakyFn,
           input: { x: 5 },
-          retry: { max: 3, on: [], backoff: "fixed" },
+          // "transient" covers any non-timeout, non-validation error from execute()
+          retry: { max: 3, on: ["transient"], backoff: "fixed" },
         },
       },
     });
@@ -380,7 +381,7 @@ describe("function node — retry", () => {
         step: {
           fn: alwaysFails,
           input: { x: 1 },
-          retry: { max: 2, on: [], backoff: "fixed" },
+          retry: { max: 2, on: ["transient"], backoff: "fixed" },
         },
       },
     });
@@ -409,7 +410,7 @@ describe("function node — retry", () => {
         step: {
           fn: flakyFn,
           input: { x: 7 },
-          retry: { max: 3, on: [], backoff: "fixed" },
+          retry: { max: 3, on: ["transient"], backoff: "fixed" },
         },
       },
     });
@@ -446,7 +447,7 @@ describe("function node — retry", () => {
         step: {
           fn: alwaysFails,
           input: { x: 1 },
-          retry: { max: 3, on: [], backoff: "fixed" },
+          retry: { max: 3, on: ["transient"], backoff: "fixed" },
         },
       },
       hooks: { onTaskError },
@@ -479,7 +480,7 @@ describe("function node — retry", () => {
         step: {
           fn: alwaysFails,
           input: { x: 1 },
-          retry: { max: 3, on: [], backoff: "fixed" },
+          retry: { max: 3, on: ["transient"], backoff: "fixed" },
         },
       },
     });
@@ -559,38 +560,102 @@ describe("function node — hooks", () => {
   });
 });
 
-describe("function node — retry.on behavior (approach B: not consulted)", () => {
-  it("retries on any thrown error regardless of retry.on value", async () => {
-    // retry.on is ignored for fn tasks — fn errors are not classified as
-    // RetryErrorKind (which are agent/runner-specific). The task retries on
-    // any thrown error from execute(), controlled solely by retry.max.
+describe("function node — retry.on classification", () => {
+  it("retry.on=[] — does NOT retry on any error (single attempt)", async () => {
+    // With on: [] the retry set is empty — no error kind is retryable.
+    // execute() should be called exactly once even though max=3.
+    let callCount = 0;
+    const flakyFn = defineFunction({
+      input: z.object({ x: z.number() }),
+      output: z.object({ result: z.number() }),
+      execute: async () => {
+        callCount++;
+        throw new Error("transient failure");
+      },
+    });
+
+    const workflow = defineWorkflow({
+      name: "fn-retry-on-empty",
+      tasks: {
+        step: {
+          fn: flakyFn,
+          input: { x: 5 },
+          retry: { max: 3, on: [], backoff: "fixed" },
+        },
+      },
+    });
+
+    const executor = new WorkflowExecutor(workflow);
+    const err = await executor.run().catch((e) => e);
+    expect(err).toBeInstanceOf(NodeMaxRetriesError);
+    // Called exactly once — no retries
+    expect(callCount).toBe(1);
+    expect((err as NodeMaxRetriesError).attempts).toHaveLength(1);
+  });
+
+  it('retry.on=["timeout"] with non-timeout error — does NOT retry', async () => {
+    // "transient" errors are not in retry.on, so no retry happens.
+    let callCount = 0;
+    const flakyFn = defineFunction({
+      input: z.object({ x: z.number() }),
+      output: z.object({ result: z.number() }),
+      execute: async () => {
+        callCount++;
+        throw new Error("generic error — not a timeout");
+      },
+    });
+
+    const workflow = defineWorkflow({
+      name: "fn-retry-on-timeout-no-match",
+      tasks: {
+        step: {
+          fn: flakyFn,
+          input: { x: 1 },
+          retry: { max: 3, on: ["timeout"], backoff: "fixed" },
+        },
+      },
+    });
+
+    const executor = new WorkflowExecutor(workflow);
+    const err = await executor.run().catch((e) => e);
+    expect(err).toBeInstanceOf(NodeMaxRetriesError);
+    // Called exactly once — "transient" not in retry.on
+    expect(callCount).toBe(1);
+    expect((err as NodeMaxRetriesError).attempts).toHaveLength(1);
+  });
+
+  it('retry.on=["timeout"] with TimeoutError — retries up to max', async () => {
+    // TimeoutError is classified as "timeout" — present in retry.on → retries happen.
+    const { TimeoutError } = await import("@ageflow/core");
     let callCount = 0;
     const flakyFn = defineFunction({
       input: z.object({ x: z.number() }),
       output: z.object({ result: z.number() }),
       execute: async ({ x }) => {
         callCount++;
-        if (callCount < 3) throw new Error("transient failure");
+        if (callCount < 3) {
+          throw new TimeoutError("step", 100);
+        }
         return { result: x };
       },
     });
 
     const workflow = defineWorkflow({
-      name: "fn-retry-on-ignored",
+      name: "fn-retry-on-timeout-match",
       tasks: {
         step: {
           fn: flakyFn,
-          input: { x: 5 },
-          // retry.on has no effect for fn tasks
-          retry: { max: 3, on: ["subprocess_error"], backoff: "fixed" },
+          input: { x: 7 },
+          retry: { max: 3, on: ["timeout"], backoff: "fixed" },
         },
       },
     });
 
     const executor = new WorkflowExecutor(workflow);
     const result = await executor.run();
+    // Retried twice (attempts 1 and 2 failed), third succeeded
     expect(callCount).toBe(3);
-    expect(result.outputs.step).toEqual({ result: 5 });
+    expect(result.outputs.step).toEqual({ result: 7 });
   });
 
   it("zod validation errors are never retried even when retry.max > 1", async () => {
@@ -611,7 +676,7 @@ describe("function node — retry.on behavior (approach B: not consulted)", () =
         step: {
           fn: badOutputFn,
           input: { x: 1 },
-          retry: { max: 3, on: [], backoff: "fixed" },
+          retry: { max: 3, on: ["transient"], backoff: "fixed" },
         },
       },
     });
