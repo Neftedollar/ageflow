@@ -409,4 +409,149 @@ describe("runNode", () => {
     expect(capturedSystemPrompt).toContain('"score"');
     expect(capturedSystemPrompt).toContain('"tags"');
   });
+
+  describe("getSystemPromptPrefix hook", () => {
+    it("prepends hook prefix to system prompt when hook returns a string", async () => {
+      let capturedSystemPrompt: string | undefined;
+
+      const runner: import("@ageflow/core").Runner = {
+        validate: vi.fn().mockResolvedValue({ ok: true }),
+        spawn: vi.fn(async (args: import("@ageflow/core").RunnerSpawnArgs) => {
+          capturedSystemPrompt = args.systemPrompt;
+          return makeSuccessResult({ result: "ok" });
+        }),
+      };
+
+      const hooks: import("@ageflow/core").WorkflowHooks = {
+        getSystemPromptPrefix: (_taskName) => "SKILL: always respond in JSON",
+      };
+
+      const task = { agent: simpleAgent };
+      await Promise.all([
+        runNode(
+          task,
+          { text: "hello" },
+          runner,
+          "prefix-task",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          hooks,
+        ),
+        vi.runAllTimersAsync(),
+      ]);
+
+      expect(capturedSystemPrompt).toBeDefined();
+      expect(capturedSystemPrompt).toContain("SKILL: always respond in JSON");
+      // Original schema prompt must still be present
+      expect(capturedSystemPrompt).toContain(
+        "You MUST respond with valid JSON",
+      );
+      // Prefix comes BEFORE the base system prompt
+      const prefixIndex = capturedSystemPrompt?.indexOf(
+        "SKILL: always respond in JSON",
+      );
+      const schemaIndex = capturedSystemPrompt?.indexOf(
+        "You MUST respond with valid JSON",
+      );
+      expect(prefixIndex).toBeLessThan(schemaIndex as number);
+    });
+
+    it("does not modify system prompt when hook returns undefined", async () => {
+      let capturedSystemPrompt: string | undefined;
+
+      const runner: import("@ageflow/core").Runner = {
+        validate: vi.fn().mockResolvedValue({ ok: true }),
+        spawn: vi.fn(async (args: import("@ageflow/core").RunnerSpawnArgs) => {
+          capturedSystemPrompt = args.systemPrompt;
+          return makeSuccessResult({ result: "ok" });
+        }),
+      };
+
+      const hooks: import("@ageflow/core").WorkflowHooks = {
+        getSystemPromptPrefix: (_taskName) => undefined,
+      };
+
+      const task = { agent: simpleAgent };
+      await Promise.all([
+        runNode(
+          task,
+          { text: "hello" },
+          runner,
+          "no-prefix-task",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          hooks,
+        ),
+        vi.runAllTimersAsync(),
+      ]);
+
+      expect(capturedSystemPrompt).toBeDefined();
+      // Should be exactly the base schema prompt — no extra prefix
+      expect(capturedSystemPrompt).not.toContain("SKILL:");
+      expect(capturedSystemPrompt).toContain(
+        "You MUST respond with valid JSON",
+      );
+    });
+
+    it("does not modify system prompt when no hooks are provided", async () => {
+      let capturedSystemPrompt: string | undefined;
+
+      const runner: import("@ageflow/core").Runner = {
+        validate: vi.fn().mockResolvedValue({ ok: true }),
+        spawn: vi.fn(async (args: import("@ageflow/core").RunnerSpawnArgs) => {
+          capturedSystemPrompt = args.systemPrompt;
+          return makeSuccessResult({ result: "ok" });
+        }),
+      };
+
+      const task = { agent: simpleAgent };
+      await Promise.all([
+        runNode(task, { text: "hello" }, runner, "no-hooks-task"),
+        vi.runAllTimersAsync(),
+      ]);
+
+      expect(capturedSystemPrompt).toBeDefined();
+      expect(capturedSystemPrompt).toContain(
+        "You MUST respond with valid JSON",
+      );
+    });
+
+    it("calls getSystemPromptPrefix with the correct taskName", async () => {
+      const prefixFn = vi.fn((_taskName: string) => "PREFIX");
+
+      const runner: import("@ageflow/core").Runner = {
+        validate: vi.fn().mockResolvedValue({ ok: true }),
+        spawn: vi.fn(async () => makeSuccessResult({ result: "ok" })),
+      };
+
+      const hooks: import("@ageflow/core").WorkflowHooks = {
+        getSystemPromptPrefix: prefixFn,
+      };
+
+      const task = { agent: simpleAgent };
+      await Promise.all([
+        runNode(
+          task,
+          { text: "hello" },
+          runner,
+          "my-named-task",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          hooks,
+        ),
+        vi.runAllTimersAsync(),
+      ]);
+
+      expect(prefixFn).toHaveBeenCalledWith("my-named-task");
+    });
+  });
 });

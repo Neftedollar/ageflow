@@ -10,6 +10,7 @@ import type {
   McpServerConfig,
   Runner,
   TaskDef,
+  WorkflowHooks,
 } from "@ageflow/core";
 import type { ZodType } from "zod";
 import { OutputValidationError } from "./errors.js";
@@ -25,6 +26,8 @@ export interface NodeRunResult<O> {
   latencyMs: number;
   retries: number;
   sessionHandle: string;
+  /** The full prompt as sent to the runner (systemPrompt + user prompt). */
+  promptSent: string;
 }
 
 // ─── Input sanitization ───────────────────────────────────────────────────────
@@ -108,6 +111,8 @@ export async function runNode<
   filteredTools?: readonly string[],
   onRetry?: (attempt: number, reason: string) => void,
   workflowMcpServers?: readonly McpServerConfig[],
+  // biome-ignore lint/suspicious/noExplicitAny: hooks generic T not available here
+  hooks?: WorkflowHooks<any>,
 ): Promise<
   NodeRunResult<
     import("zod").infer<
@@ -131,10 +136,15 @@ export async function runNode<
 
       // Build spawn args — only include optional properties when defined
       // (exactOptionalPropertyTypes requires we not pass explicit undefined)
+      const baseSystemPrompt = buildOutputSchemaPrompt(resolvedDef.output);
+      const prefix = hooks?.getSystemPromptPrefix?.(taskName);
+      const systemPrompt = prefix
+        ? `${prefix}\n\n${baseSystemPrompt}`
+        : baseSystemPrompt;
       const spawnArgs: import("@ageflow/core").RunnerSpawnArgs = {
         prompt,
         taskName,
-        systemPrompt: buildOutputSchemaPrompt(resolvedDef.output),
+        systemPrompt,
       };
       if (resolvedDef.model !== undefined) {
         spawnArgs.model = resolvedDef.model;
@@ -193,6 +203,7 @@ export async function runNode<
         latencyMs,
         retries: attempt,
         sessionHandle: spawnResult.sessionHandle,
+        promptSent: `${systemPrompt}\n\n${prompt}`,
       };
     } catch (err) {
       // HITL conflict — never retry. Runners emit "unknown" as the task name
