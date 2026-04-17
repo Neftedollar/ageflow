@@ -469,6 +469,8 @@ export interface TaskMetrics {
   readonly retries: number;
   /** Estimated USD cost based on model and token counts. */
   readonly estimatedCost: number;
+  /** The full prompt as sent to the runner (including any injected prefixes). */
+  readonly promptSent?: string;
 }
 
 export interface WorkflowMetrics {
@@ -500,6 +502,14 @@ export interface WorkflowHooks<T extends TasksMap = TasksMap> {
     result: unknown,
     summary: WorkflowMetrics,
   ) => void;
+  /**
+   * Returns extra context to prepend to the agent's system prompt.
+   * Called before each task spawn. Learning hooks use this to inject skills.
+   * Generic — useful beyond learning (per-task instructions, env context).
+   */
+  readonly getSystemPromptPrefix?: (
+    taskName: keyof T & string,
+  ) => string | undefined;
 }
 
 // ─── MCP exposure config ─────────────────────────────────────────────────────
