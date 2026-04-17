@@ -196,8 +196,8 @@ export async function runEvaluation(
 
   // 1. List all skills
   const allSkills = await input.skillStore.list();
-  const targetSkills = allSkills.filter(
-    (s) => (statuses as string[]).includes(s.status) && s.status !== "retired",
+  const targetSkills = allSkills.filter((s) =>
+    (statuses as string[]).includes(s.status),
   );
 
   const results: EvaluationResult[] = [];
