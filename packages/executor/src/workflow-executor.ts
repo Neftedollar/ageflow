@@ -365,6 +365,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                 filteredTools,
                 undefined,
                 this.workflow.mcpServers,
+                hooks,
               );
 
               const latencyMs = Date.now() - taskStart;
@@ -419,6 +420,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                 latencyMs,
                 retries: result.retries,
                 estimatedCost,
+                promptSent: result.promptSent,
               };
 
               // Fire onTaskComplete hook
@@ -624,6 +626,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                   });
                 },
                 this.workflow.mcpServers,
+                hooks,
               );
 
               const latencyMs = Date.now() - taskStart;
@@ -686,6 +689,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                 latencyMs,
                 retries: result.retries,
                 estimatedCost,
+                promptSent: result.promptSent,
               };
 
               // Fire onTaskComplete hook

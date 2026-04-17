@@ -354,4 +354,81 @@ describe("WorkflowExecutor", () => {
     expect(result.metrics.totalTokensIn).toBe(20); // 2 tasks × 10 tokens each
     expect(result.metrics.totalTokensOut).toBe(40); // 2 tasks × 20 tokens each
   });
+
+  describe("promptSent in TaskMetrics", () => {
+    it("onTaskComplete receives promptSent containing the user prompt", async () => {
+      const onTaskComplete = vi.fn();
+
+      const workflow = defineWorkflow({
+        name: "test-prompt-sent",
+        tasks: {
+          taskA: { agent: agentA, input: { value: "hello-world" } },
+        },
+        hooks: { onTaskComplete },
+      });
+
+      const executor = new WorkflowExecutor(workflow);
+      await executor.run();
+
+      expect(onTaskComplete).toHaveBeenCalledTimes(1);
+      const [, , metrics] = onTaskComplete.mock.calls[0] as [
+        string,
+        unknown,
+        import("@ageflow/core").TaskMetrics,
+      ];
+      expect(metrics.promptSent).toBeDefined();
+      expect(typeof metrics.promptSent).toBe("string");
+      // The prompt template is `Process: ${value}`, so "hello-world" must appear
+      expect(metrics.promptSent).toContain("hello-world");
+    });
+
+    it("promptSent includes the system prompt content", async () => {
+      const onTaskComplete = vi.fn();
+
+      const workflow = defineWorkflow({
+        name: "test-prompt-sent-system",
+        tasks: {
+          taskA: { agent: agentA, input: { value: "test" } },
+        },
+        hooks: { onTaskComplete },
+      });
+
+      const executor = new WorkflowExecutor(workflow);
+      await executor.run();
+
+      const [, , metrics] = onTaskComplete.mock.calls[0] as [
+        string,
+        unknown,
+        import("@ageflow/core").TaskMetrics,
+      ];
+      // System prompt contains JSON schema instructions
+      expect(metrics.promptSent).toContain("You MUST respond with valid JSON");
+    });
+
+    it("promptSent includes getSystemPromptPrefix content when hook is set", async () => {
+      const onTaskComplete = vi.fn();
+
+      const workflow = defineWorkflow({
+        name: "test-prompt-sent-prefix",
+        tasks: {
+          taskA: { agent: agentA, input: { value: "test" } },
+        },
+        hooks: {
+          onTaskComplete,
+          getSystemPromptPrefix: (_taskName) =>
+            "LEARNING SKILL: be extra helpful",
+        },
+      });
+
+      const executor = new WorkflowExecutor(workflow);
+      await executor.run();
+
+      const [, , metrics] = onTaskComplete.mock.calls[0] as [
+        string,
+        unknown,
+        import("@ageflow/core").TaskMetrics,
+      ];
+      expect(metrics.promptSent).toContain("LEARNING SKILL: be extra helpful");
+    });
+  });
 });
