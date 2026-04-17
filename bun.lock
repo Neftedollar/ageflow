@@ -103,7 +103,7 @@
     },
     "packages/cli": {
       "name": "@ageflow/cli",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "bin": {
         "agentwf": "./dist/bin.js",
       },
@@ -124,7 +124,7 @@
     },
     "packages/core": {
       "name": "@ageflow/core",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "devDependencies": {
         "@types/node": "^22.0.0",
         "vitest": "^2.1.0",
@@ -136,7 +136,7 @@
     },
     "packages/executor": {
       "name": "@ageflow/executor",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@ageflow/core": "workspace:*",
         "zod-to-json-schema": "^3.23.0",
@@ -147,9 +147,40 @@
         "zod": "^3.23.0",
       },
     },
+    "packages/learning": {
+      "name": "@ageflow/learning",
+      "version": "0.3.0",
+      "dependencies": {
+        "@ageflow/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@ageflow/executor": "workspace:*",
+        "@types/node": "^22.0.0",
+        "vitest": "^2.1.0",
+        "zod": "^3.23.0",
+      },
+      "peerDependencies": {
+        "@ageflow/executor": "workspace:*",
+      },
+      "optionalPeers": [
+        "@ageflow/executor",
+      ],
+    },
+    "packages/learning-sqlite": {
+      "name": "@ageflow/learning-sqlite",
+      "version": "0.3.0",
+      "dependencies": {
+        "@ageflow/learning": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.1.0",
+        "@types/node": "^22.0.0",
+        "vitest": "^2.1.0",
+      },
+    },
     "packages/mcp-server": {
       "name": "@ageflow/mcp-server",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@ageflow/core": "workspace:*",
         "@ageflow/executor": "workspace:*",
@@ -166,7 +197,7 @@
     },
     "packages/runners/api": {
       "name": "@ageflow/runner-api",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@ageflow/core": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.0.0",
@@ -180,7 +211,7 @@
     },
     "packages/runners/claude": {
       "name": "@ageflow/runner-claude",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@ageflow/core": "workspace:*",
       },
@@ -192,7 +223,7 @@
     },
     "packages/runners/codex": {
       "name": "@ageflow/runner-codex",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@ageflow/core": "workspace:*",
       },
@@ -204,7 +235,7 @@
     },
     "packages/server": {
       "name": "@ageflow/server",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@ageflow/core": "workspace:*",
         "@ageflow/executor": "workspace:*",
@@ -217,7 +248,7 @@
     },
     "packages/testing": {
       "name": "@ageflow/testing",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@ageflow/core": "workspace:*",
         "@ageflow/executor": "workspace:*",
@@ -251,6 +282,10 @@
     "@ageflow/example-mcp-server": ["@ageflow/example-mcp-server@workspace:examples/mcp-server"],
 
     "@ageflow/executor": ["@ageflow/executor@workspace:packages/executor"],
+
+    "@ageflow/learning": ["@ageflow/learning@workspace:packages/learning"],
+
+    "@ageflow/learning-sqlite": ["@ageflow/learning-sqlite@workspace:packages/learning-sqlite"],
 
     "@ageflow/mcp-server": ["@ageflow/mcp-server@workspace:packages/mcp-server"],
 
