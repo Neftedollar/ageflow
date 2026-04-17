@@ -431,6 +431,199 @@ describe("WorkflowExecutor.run() — runnerOverrides end-to-end", () => {
   });
 });
 
+// ─── HITL security: deny-all + runnerOverrides filtering (#160) ──────────────
+
+describe("HITL security — Issue A: deny-all propagates empty allowlist", () => {
+  it("spawnArgs.tools is [] when HITL denies all tools", async () => {
+    const toolA = makeInlineTool("tool A", z.object({}), async () => "a");
+
+    const agent = defineAgent({
+      runner: "mock-ro",
+      input: z.object({ v: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ v }) => `do: ${v}`,
+      tools: { tool_a: toolA },
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
+
+    // filteredTools = [] means HITL denied everything
+    await runNode(
+      { agent, input: { v: "hi" } },
+      { v: "hi" },
+      runner,
+      "test-task",
+      undefined, // sessionHandle
+      undefined, // permissions
+      [], // filteredTools — deny-all
+    );
+
+    const call = spawnCalls[0];
+    // tools must be set to [] — not undefined (which would allow all tools)
+    expect(call?.tools).toBeDefined();
+    expect(call?.tools).toEqual([]);
+  });
+
+  it("spawnArgs.inlineTools is undefined when HITL denies all tools", async () => {
+    const toolA = makeInlineTool("tool A", z.object({}), async () => "a");
+
+    const agent = defineAgent({
+      runner: "mock-ro",
+      input: z.object({ v: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ v }) => `do: ${v}`,
+      tools: { tool_a: toolA },
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
+
+    await runNode(
+      { agent, input: { v: "hi" } },
+      { v: "hi" },
+      runner,
+      "test-task",
+      undefined, // sessionHandle
+      undefined, // permissions
+      [], // filteredTools — deny-all
+    );
+
+    const call = spawnCalls[0];
+    // No inline tools should be passed either — all denied
+    expect(call?.inlineTools).toBeUndefined();
+  });
+});
+
+describe("HITL security — Issue B: runnerOverrides.tools filtered through HITL", () => {
+  it("denied tool X in runnerOverrides is blocked even if passed as per-call override", async () => {
+    const toolX = makeInlineTool(
+      "tool X (denied)",
+      z.object({}),
+      async () => "x",
+    );
+    const toolZ = makeInlineTool("tool Z (new)", z.object({}), async () => "z");
+
+    const agent = defineAgent({
+      runner: "mock-ro",
+      input: z.object({ v: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ v }) => `do: ${v}`,
+      tools: ["tool_y"], // agent has tool_y as string allowlist
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
+
+    // HITL allows tool_y but not tool_x or tool_z
+    await runNode(
+      { agent, input: { v: "hi" } },
+      { v: "hi" },
+      runner,
+      "test-task",
+      undefined, // sessionHandle
+      undefined, // permissions
+      ["tool_y"], // filteredTools — HITL allows only tool_y
+      undefined, // onRetry
+      undefined, // workflowMcpServers
+      undefined, // hooks
+      {
+        "mock-ro": {
+          tools: { tool_x: toolX, tool_z: toolZ },
+        },
+      },
+    );
+
+    const call = spawnCalls[0];
+    // tool_x is denied by HITL — must NOT appear in tools allowlist
+    expect(call?.tools).not.toContain("tool_x");
+    // tool_z is also not in HITL allowlist — must NOT appear
+    expect(call?.tools).not.toContain("tool_z");
+    // tool_y was approved by HITL — must appear
+    expect(call?.tools).toContain("tool_y");
+  });
+
+  it("inlineTools does not contain a denied per-call tool", async () => {
+    const toolX = makeInlineTool(
+      "tool X (denied inline)",
+      z.object({}),
+      async () => "x",
+    );
+
+    const agent = defineAgent({
+      runner: "mock-ro",
+      input: z.object({ v: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ v }) => `do: ${v}`,
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
+
+    // HITL denies tool_x (empty allowlist)
+    await runNode(
+      { agent, input: { v: "hi" } },
+      { v: "hi" },
+      runner,
+      "test-task",
+      undefined,
+      undefined,
+      [], // filteredTools — deny-all
+      undefined,
+      undefined,
+      undefined,
+      {
+        "mock-ro": {
+          tools: { tool_x: toolX },
+        },
+      },
+    );
+
+    const call = spawnCalls[0];
+    // tool_x must NOT be in inlineTools — it was blocked by HITL deny-all
+    expect(call?.inlineTools).toBeUndefined();
+    // tools must be empty (deny-all preserved)
+    expect(call?.tools).toEqual([]);
+  });
+});
+
+describe("HITL security — Issue B (inline): agent inline tools filtered through HITL", () => {
+  it("agent inline tools are filtered: denied name X is excluded from inlineTools", async () => {
+    const toolX = makeInlineTool("tool X", z.object({}), async () => "x");
+    const toolY = makeInlineTool("tool Y", z.object({}), async () => "y");
+
+    const agent = defineAgent({
+      runner: "mock-ro",
+      input: z.object({ v: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ v }) => `do: ${v}`,
+      tools: { tool_x: toolX, tool_y: toolY },
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
+
+    // HITL allows tool_y but denies tool_x
+    await runNode(
+      { agent, input: { v: "hi" } },
+      { v: "hi" },
+      runner,
+      "test-task",
+      undefined,
+      undefined,
+      ["tool_y"], // filteredTools — only tool_y passes
+    );
+
+    const call = spawnCalls[0];
+    // inlineTools should only contain tool_y
+    expect(call?.inlineTools).toBeDefined();
+    expect(Object.keys(call?.inlineTools ?? {})).toContain("tool_y");
+    expect(Object.keys(call?.inlineTools ?? {})).not.toContain("tool_x");
+    // tools allowlist should only have tool_y
+    expect(call?.tools).toEqual(["tool_y"]);
+  });
+});
+
 // ─── InlineToolsNotSupportedError: subprocess runners ────────────────────────
 
 describe("InlineToolsNotSupportedError — subprocess runner guard", () => {

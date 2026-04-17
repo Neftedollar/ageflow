@@ -35,12 +35,18 @@ export function buildInitialMessages(input: BuildMessagesInput): ChatMessage[] {
  * Convert the subset of the runner's tool registry named in `names` into
  * OpenAI tool schemas. Unknown names are ignored (executor is responsible
  * for validating tool names against the registry before spawn).
+ *
+ * Semantics:
+ *  - `names === undefined` → no restriction; returns undefined (caller passes no `tools` key)
+ *  - `names === []`        → explicit deny-all; returns [] (zero schemas — no tools available)
+ *  - `names.length > 0`   → allowlist; returns matching schemas
  */
 export function toolsToSchemas(
   registry: ToolRegistry,
   names: readonly string[] | undefined,
 ): ToolSchema[] | undefined {
-  if (!names || names.length === 0) return undefined;
+  if (names === undefined) return undefined;
+  if (names.length === 0) return [];
   const out: ToolSchema[] = [];
   for (const name of names) {
     const def = registry[name];
@@ -54,5 +60,5 @@ export function toolsToSchemas(
       },
     });
   }
-  return out.length > 0 ? out : undefined;
+  return out;
 }

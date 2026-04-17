@@ -45,7 +45,11 @@ export async function runToolLoop(
     const body: ChatCompletionRequest = {
       model: input.model,
       messages,
-      ...(input.tools ? { tools: input.tools } : {}),
+      // Only include `tools` when there are schemas to send.  An empty array
+      // would cause most APIs to return a 400; an absent key means "no tools".
+      // Registry-level enforcement (empty filteredRegistry) prevents tool
+      // execution even when the key is omitted.
+      ...(input.tools && input.tools.length > 0 ? { tools: input.tools } : {}),
     };
 
     const resp = await postChat(input, body);

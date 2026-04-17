@@ -212,13 +212,25 @@ export class ApiRunner implements Runner {
 
     try {
       const mcpRegistry = await mcpToolsToRegistry(perSpawnClients);
-      const merged: ToolRegistry = { ...filteredRegistry, ...mcpRegistry };
 
+      // When args.tools is defined it is the explicit allowlist (possibly []).
+      // MCP tools are always additive — UNLESS args.tools is an explicit empty
+      // allowlist (deny-all from HITL), in which case MCP tools are also blocked.
+      const mcpAllowed =
+        args.tools !== undefined && args.tools.length === 0
+          ? {} // deny-all: no MCP tools either
+          : mcpRegistry;
+
+      const merged: ToolRegistry = { ...filteredRegistry, ...mcpAllowed };
+
+      // Build the effective names list passed to toolsToSchemas:
+      //  - args.tools defined     → explicit allowlist + permitted MCP tool names
+      //  - args.tools undefined   → no restriction; use all registered tools
       const mergedToolsArg: string[] | undefined =
         args.tools !== undefined
-          ? [...args.tools, ...Object.keys(mcpRegistry)]
-          : Object.keys(mcpRegistry).length > 0
-            ? [...Object.keys(filteredRegistry), ...Object.keys(mcpRegistry)]
+          ? [...args.tools, ...Object.keys(mcpAllowed)]
+          : Object.keys(mcpAllowed).length > 0
+            ? [...Object.keys(filteredRegistry), ...Object.keys(mcpAllowed)]
             : args.tools;
 
       const toolSchemas = toolsToSchemas(merged, mergedToolsArg);

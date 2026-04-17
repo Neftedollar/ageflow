@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildInitialMessages } from "../message-builder.js";
+import { buildInitialMessages, toolsToSchemas } from "../message-builder.js";
 import type { ChatMessage } from "../openai-types.js";
+import type { ToolRegistry } from "../types.js";
 
 describe("buildInitialMessages", () => {
   it("user-only prompt with no system and no history", () => {
@@ -62,5 +63,38 @@ describe("buildInitialMessages", () => {
     expect(msgs.filter((m) => m.content === "old schema").length).toBe(0);
     // User prompt is last
     expect(msgs[msgs.length - 1]).toEqual({ role: "user", content: "next" });
+  });
+});
+
+describe("toolsToSchemas — empty-allowlist / deny-all semantics (#160)", () => {
+  const registry: ToolRegistry = {
+    my_tool: {
+      description: "a tool",
+      parameters: { type: "object", properties: {} },
+      execute: async () => "result",
+    },
+  };
+
+  it("returns undefined when names is undefined (no restriction)", () => {
+    expect(toolsToSchemas(registry, undefined)).toBeUndefined();
+  });
+
+  it("returns [] when names is [] (explicit deny-all)", () => {
+    const result = toolsToSchemas(registry, []);
+    expect(result).toEqual([]);
+  });
+
+  it("returns matching schemas for a non-empty allowlist", () => {
+    const result = toolsToSchemas(registry, ["my_tool"]);
+    expect(result).toHaveLength(1);
+    expect(result?.[0]?.function.name).toBe("my_tool");
+  });
+
+  it("returns [] (not undefined) for an allowlist with no registry matches", () => {
+    // All names unknown — but list is defined → deny-all semantics preserved
+    const result = toolsToSchemas(registry, ["unknown_tool"]);
+    // The function skips unknown names but still returns an array (possibly empty)
+    // since the caller explicitly provided a non-empty allowlist
+    expect(Array.isArray(result)).toBe(true);
   });
 });
