@@ -2,19 +2,26 @@ import type { WorkflowHooks } from "@ageflow/core";
 import type { SkillStore, TraceStore } from "./interfaces.js";
 import type { ExecutionTrace, LearningConfig, TaskTrace } from "./types.js";
 import { DEFAULT_CONFIG } from "./types.js";
+import { runReflection } from "./workflows/reflection.js";
 
 export interface CreateLearningHooksOptions {
   readonly skillStore: SkillStore;
   readonly traceStore: TraceStore;
   readonly workflowName: string;
   readonly config?: Partial<LearningConfig>;
+  /**
+   * DAG structure passed to runReflection when auto-reflection fires.
+   * Required for reflectEvery scheduling; if omitted, auto-reflection is
+   * silently skipped even when reflectEvery is set.
+   */
+  readonly dagStructure?: Record<string, readonly string[]>;
 }
 
 export function createLearningHooks(
   opts: CreateLearningHooksOptions,
 ): WorkflowHooks {
-  const _config = { ...DEFAULT_CONFIG, ...opts.config }; // reserved for Phase 6
-  const { skillStore, traceStore, workflowName } = opts;
+  const config = { ...DEFAULT_CONFIG, ...opts.config };
+  const { skillStore, traceStore, workflowName, dagStructure } = opts;
 
   // Per-run state (reset on each workflow execution)
   let taskTraces: TaskTrace[] = [];
@@ -150,7 +157,31 @@ export function createLearningHooks(
       isFirstTaskOfRun = true;
       capturedWorkflowInput = null;
 
-      // TODO Phase 6: trigger reflectionWorkflow here based on config.reflectEvery
+      // Auto-reflection scheduler — Phase 6 implementation of reflectEvery config.
+      // Fires runReflection() non-blocking (fire-and-forget) when the condition is met.
+      // Errors are logged but never propagate to avoid blocking workflow completion.
+      if (dagStructure !== undefined) {
+        const { reflectEvery } = config;
+        let shouldReflect = false;
+
+        if (reflectEvery === "always") {
+          shouldReflect = true;
+        } else if (typeof reflectEvery === "number" && reflectEvery >= 1) {
+          shouldReflect = runCount % reflectEvery === 0;
+        }
+        // "on-failure" and "on-feedback" are intentionally left for future phases.
+
+        if (shouldReflect) {
+          runReflection({
+            currentTrace: trace,
+            dagStructure,
+            skillStore,
+            traceStore,
+          }).catch((err: unknown) => {
+            console.warn("[learning] auto-reflection failed", err);
+          });
+        }
+      }
     },
   };
 }
