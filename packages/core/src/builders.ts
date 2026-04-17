@@ -246,5 +246,12 @@ export function unregisterRunner(name: string): void {
  */
 export async function shutdownAllRunners(): Promise<void> {
   const runners = getRunners();
-  await Promise.allSettled([...runners.values()].map((r) => r.shutdown?.()));
+  const results = await Promise.allSettled(
+    [...runners.values()].map((r) => r.shutdown?.()),
+  );
+  for (const r of results) {
+    if (r.status === "rejected") {
+      console.warn("[agentflow] runner shutdown failed:", r.reason);
+    }
+  }
 }
