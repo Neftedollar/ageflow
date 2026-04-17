@@ -335,7 +335,6 @@ export interface FunctionDef<
   readonly outputSchema: O;
   readonly execute: (
     input: import("zod").infer<I>,
-    ctx?: Record<string, unknown>,
   ) => Promise<import("zod").infer<O>>;
 }
 
@@ -556,7 +555,15 @@ export interface FunctionTaskDef<
         F extends { inputSchema: infer I extends ZodType } ? I : never
       >);
   /**
-   * Optional retry config. Same semantics as agent tasks: retries on thrown errors.
+   * Optional retry config. fn tasks retry on any thrown error from `execute()`.
+   *
+   * `retry.on` is NOT consulted — `RetryErrorKind` values (subprocess_error,
+   * output_validation_error, timeout, etc.) are runner/agent-specific concepts
+   * that do not apply to deterministic in-process functions. Set `max` to control
+   * the number of attempts; set `on` to any value or leave it empty — it has no
+   * effect on fn-task retry decisions.
+   *
+   * Input and output Zod validation errors are never retried regardless of config.
    */
   readonly retry?: Partial<RetryConfig>;
   /**

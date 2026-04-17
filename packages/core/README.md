@@ -80,6 +80,48 @@ const refineLoop = loop({
 });
 ```
 
+## Deterministic steps with `defineFunction`
+
+Not every task in a workflow is an LLM call. Use `defineFunction` to put a deterministic, non-LLM step in the DAG — fetching data, transforming JSON, validating, persisting. It participates in the DAG like an agent: `dependsOn`, `skipIf`, retry, loop, event emission, Zod validation in and out.
+
+```ts
+import { z } from "zod";
+import { defineFunction, defineWorkflow } from "@ageflow/core";
+
+const snapshotStep = defineFunction({
+  input: z.object({ userId: z.string() }),
+  output: z.object({ orders: z.array(z.any()), total: z.number() }),
+  execute: async (input) => {
+    const orders = await db.orders.findAll({ userId: input.userId });
+    return { orders, total: orders.reduce((s, o) => s + o.amount, 0) };
+  },
+});
+
+const wf = defineWorkflow({
+  name: "orders-recap",
+  tasks: {
+    snapshot: { fn: snapshotStep, input: (ctx) => ({ userId: "u1" }) },
+    interpret: {
+      agent: interpretAgent,
+      dependsOn: ["snapshot"],
+      input: (ctx) => ({ snapshot: ctx.snapshot.output }),
+    },
+    persist: {
+      fn: persistStep,
+      dependsOn: ["interpret"],
+      input: (ctx) => ({ insights: ctx.interpret.output }),
+    },
+  },
+});
+```
+
+### Differences from agent tasks
+
+- No runner, no token usage, no budget accounting — cost metrics are always 0.
+- No session — fn tasks cannot participate in session sharing.
+- Retries: fn tasks retry on any thrown error from `execute()`. `retry.on` is not consulted — `RetryErrorKind` values are runner/agent-specific and do not apply to in-process functions. Input and output Zod validation errors are never retried.
+- Preflight: agent-specific checks (runner brand, session cross-provider, MCP config) skip fn tasks. Topology checks still apply.
+
 ### `sessionToken(name, runner)`
 
 Share conversation context between agents. Both agents send messages to the same model session.

@@ -88,10 +88,7 @@ export function defineFunction<I extends ZodType, O extends ZodType>(args: {
   name?: string;
   input: I;
   output: O;
-  execute: (
-    input: import("zod").infer<I>,
-    ctx?: Record<string, unknown>,
-  ) => Promise<import("zod").infer<O>>;
+  execute: (input: import("zod").infer<I>) => Promise<import("zod").infer<O>>;
 }): FunctionDef<I, O> {
   const def: FunctionDef<I, O> = {
     _tag: "function",

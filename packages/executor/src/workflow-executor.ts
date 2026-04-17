@@ -1,6 +1,7 @@
 import { NodeMaxRetriesError, getRunner, resolveAgentDef } from "@ageflow/core";
 import type {
   AgentDef,
+  AttemptRecord,
   CheckpointEvent,
   FunctionDef,
   FunctionTaskDef,
@@ -132,7 +133,17 @@ const DEFAULT_FN_RETRY: RetryConfig = {
 /**
  * Run a function task with retry logic.
  * Validates input via inputSchema, calls execute(), validates output via outputSchema.
- * Retries on any thrown error up to retry.max attempts.
+ *
+ * Retry behavior:
+ * - Input/output Zod validation errors are never retried (they indicate a programming
+ *   error, not a transient failure).
+ * - Errors thrown from execute() are retried up to retry.max times.
+ *   retry.on is NOT checked for fn tasks — RetryErrorKind values (subprocess_error,
+ *   output_validation_error, timeout, etc.) are agent/runner-specific and do not
+ *   apply to deterministic in-process functions. fn tasks retry on ANY thrown error
+ *   from execute(), regardless of retry.on.
+ * - On exhaustion, throws NodeMaxRetriesError with the full attempts array so the
+ *   executor can report the correct attempt count in hooks and events.
  */
 async function runFunctionTask<
   // biome-ignore lint/suspicious/noExplicitAny: structural constraint
@@ -149,7 +160,7 @@ async function runFunctionTask<
   const maxAttempts = retry.max;
   const startTime = Date.now();
 
-  // Validate input through Zod security boundary
+  // Validate input through Zod security boundary — never retried
   const parsedInput = fnDef.inputSchema.safeParse(resolvedInput);
   if (!parsedInput.success) {
     throw new Error(
@@ -157,12 +168,13 @@ async function runFunctionTask<
     );
   }
 
+  const attemptRecords: AttemptRecord[] = [];
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       const rawOutput = await fnDef.execute(parsedInput.data);
-      const latencyMs = Date.now() - startTime;
 
-      // Validate output through Zod security boundary
+      // Validate output through Zod security boundary — never retried
       const parsedOutput = fnDef.outputSchema.safeParse(rawOutput);
       if (!parsedOutput.success) {
         throw new Error(
@@ -170,24 +182,38 @@ async function runFunctionTask<
         );
       }
 
+      const latencyMs = Date.now() - startTime;
       return { output: parsedOutput.data, latencyMs, retries: attempt };
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
 
-      // Check if there are more attempts to try
+      // Zod validation errors (input/output) are never retried
+      const isValidationError =
+        e.message.includes("input validation failed") ||
+        e.message.includes("output validation failed");
+      if (isValidationError) {
+        throw e;
+      }
+
+      // Record this attempt
+      attemptRecords.push({
+        attempt,
+        error: e.message,
+        // fn tasks have no runner-specific error kind — use a stable sentinel
+        // biome-ignore lint/suspicious/noExplicitAny: fn tasks use non-standard error kind
+        errorCode: "subprocess_error" as any,
+      });
+
       if (attempt < maxAttempts - 1) {
         onRetry?.(attempt + 1, e.message);
         // No backoff for function tasks — they're in-process calls
-      } else {
-        throw e;
       }
     }
   }
 
-  // Unreachable: loop either returns or throws
-  throw new Error(
-    `[agentflow] Function task "${taskName}" max retries exhausted`,
-  );
+  // All attempts exhausted — throw NodeMaxRetriesError so the executor can
+  // report the correct attempt count in hooks (onTaskError) and events (task:error).
+  throw new NodeMaxRetriesError(taskName, attemptRecords);
 }
 
 export class WorkflowExecutor<T extends TasksMap> {
@@ -447,7 +473,15 @@ export class WorkflowExecutor<T extends TasksMap> {
                 );
               } catch (err) {
                 if (err instanceof Error) {
-                  hooks?.onTaskError?.(taskName as keyof T & string, err, 1);
+                  const attemptCount =
+                    err instanceof NodeMaxRetriesError
+                      ? err.attempts.length
+                      : 1;
+                  hooks?.onTaskError?.(
+                    taskName as keyof T & string,
+                    err,
+                    attemptCount,
+                  );
                 }
                 throw err;
               }
@@ -821,7 +855,13 @@ export class WorkflowExecutor<T extends TasksMap> {
                 });
               } catch (err) {
                 const e = err instanceof Error ? err : new Error(String(err));
-                hooks?.onTaskError?.(taskName as keyof T & string, e, 1);
+                const attemptCount =
+                  err instanceof NodeMaxRetriesError ? err.attempts.length : 1;
+                hooks?.onTaskError?.(
+                  taskName as keyof T & string,
+                  e,
+                  attemptCount,
+                );
                 push({
                   type: "task:error",
                   runId,
@@ -833,7 +873,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                     message: e.message,
                     ...(e.stack !== undefined ? { stack: e.stack } : {}),
                   },
-                  attempt: 1,
+                  attempt: attemptCount,
                   terminal: true,
                 });
                 throw e;

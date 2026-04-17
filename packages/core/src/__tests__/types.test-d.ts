@@ -1,13 +1,17 @@
 import { assertType, describe, expectTypeOf, it } from "vitest";
 import { z } from "zod";
-import { defineAgent, resolveAgentDef } from "../builders.js";
+import { defineAgent, defineFunction, resolveAgentDef } from "../builders.js";
 import type {
   AgentDef,
   BoundCtx,
+  CtxFor,
+  FunctionTaskDef,
+  InputOf,
   OutputOf,
   RunnerOf,
   SessionToken,
   TaskDef,
+  TasksMap,
 } from "../types.js";
 
 // ─── Test agents ──────────────────────────────────────────────────────────────
@@ -153,5 +157,55 @@ describe("BoundCtx — dependsOn key enforcement", () => {
       },
     };
     void taskWithTypedCtx;
+  });
+});
+
+// ─── defineFunction type tests ────────────────────────────────────────────────
+
+const snapshotStep = defineFunction({
+  input: z.object({ userId: z.string() }),
+  output: z.object({ orders: z.array(z.string()), total: z.number() }),
+  execute: async (input) => ({
+    orders: [`order-${input.userId}`],
+    total: 42,
+  }),
+});
+
+describe("defineFunction type inference", () => {
+  it("InputOf<FunctionDef> resolves to inferred Zod input type", () => {
+    expectTypeOf<InputOf<typeof snapshotStep>>().toEqualTypeOf<{
+      userId: string;
+    }>();
+  });
+
+  it("OutputOf<FunctionDef> resolves to inferred Zod output type", () => {
+    expectTypeOf<OutputOf<typeof snapshotStep>>().toEqualTypeOf<{
+      orders: string[];
+      total: number;
+    }>();
+  });
+
+  it("execute signature takes only input (no ctx arg)", () => {
+    // The execute function should only accept the typed input, not a second ctx arg
+    expectTypeOf(snapshotStep.execute).parameters.toEqualTypeOf<
+      [{ userId: string }]
+    >();
+  });
+});
+
+describe("CtxFor with fn task dep", () => {
+  it("CtxFor resolves fn task output from outputSchema", () => {
+    type Tasks = {
+      snapshot: FunctionTaskDef<typeof snapshotStep, readonly []>;
+      process: TaskDef<typeof analyzeAgent, readonly ["snapshot"]>;
+    };
+
+    type Ctx = CtxFor<Tasks, "process">;
+    assertType<{
+      readonly snapshot: {
+        readonly output: { orders: string[]; total: number };
+        readonly _source: "function";
+      };
+    }>({} as Ctx);
   });
 });

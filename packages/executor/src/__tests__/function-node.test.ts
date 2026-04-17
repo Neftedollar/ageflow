@@ -5,6 +5,7 @@
  */
 
 import {
+  NodeMaxRetriesError,
   defineAgent,
   defineFunction,
   defineWorkflow,
@@ -179,7 +180,8 @@ describe("function node — event emission", () => {
     );
     expect(errorEv).toBeDefined();
     if (errorEv?.type === "task:error") {
-      expect(errorEv.error.message).toBe("function crashed");
+      // NodeMaxRetriesError wraps the last error message
+      expect(errorEv.error.message).toContain("function crashed");
       expect(errorEv.terminal).toBe(true);
     }
   });
@@ -363,7 +365,7 @@ describe("function node — retry", () => {
     expect(result.outputs.step).toEqual({ result: 10 });
   });
 
-  it("throws after exhausting retry attempts", async () => {
+  it("throws NodeMaxRetriesError after exhausting retry attempts", async () => {
     const alwaysFails = defineFunction({
       input: z.object({ x: z.number() }),
       output: z.object({ result: z.number() }),
@@ -384,7 +386,9 @@ describe("function node — retry", () => {
     });
 
     const executor = new WorkflowExecutor(workflow);
-    await expect(executor.run()).rejects.toThrow("always fails");
+    const err = await executor.run().catch((e) => e);
+    expect(err).toBeInstanceOf(NodeMaxRetriesError);
+    expect((err as NodeMaxRetriesError).attempts).toHaveLength(2);
   });
 
   it("emits task:retry events on retries via stream()", async () => {
@@ -422,6 +426,81 @@ describe("function node — retry", () => {
     expect(retryEv).toBeDefined();
     if (retryEv?.type === "task:retry") {
       expect(retryEv.attempt).toBe(1);
+    }
+  });
+
+  it("onTaskError receives correct attempt count after retry exhaustion", async () => {
+    const alwaysFails = defineFunction({
+      input: z.object({ x: z.number() }),
+      output: z.object({ result: z.number() }),
+      execute: async () => {
+        throw new Error("always fails");
+      },
+    });
+
+    const onTaskError = vi.fn();
+
+    const workflow = defineWorkflow({
+      name: "fn-retry-attempt-count",
+      tasks: {
+        step: {
+          fn: alwaysFails,
+          input: { x: 1 },
+          retry: { max: 3, on: [], backoff: "fixed" },
+        },
+      },
+      hooks: { onTaskError },
+    });
+
+    const executor = new WorkflowExecutor(workflow);
+    await expect(executor.run()).rejects.toBeInstanceOf(NodeMaxRetriesError);
+
+    expect(onTaskError).toHaveBeenCalledTimes(1);
+    const [, , attemptCount] = onTaskError.mock.calls[0] as [
+      string,
+      Error,
+      number,
+    ];
+    expect(attemptCount).toBe(3);
+  });
+
+  it("task:error event has attempt: 3 after 3-attempt retry exhaustion via stream()", async () => {
+    const alwaysFails = defineFunction({
+      input: z.object({ x: z.number() }),
+      output: z.object({ result: z.number() }),
+      execute: async () => {
+        throw new Error("always fails");
+      },
+    });
+
+    const workflow = defineWorkflow({
+      name: "fn-retry-attempt-count-event",
+      tasks: {
+        step: {
+          fn: alwaysFails,
+          input: { x: 1 },
+          retry: { max: 3, on: [], backoff: "fixed" },
+        },
+      },
+    });
+
+    const events: WorkflowEvent[] = [];
+    const executor = new WorkflowExecutor(workflow);
+    try {
+      for await (const ev of executor.stream()) {
+        events.push(ev);
+      }
+    } catch {
+      // expected
+    }
+
+    const errorEv = events.find(
+      (e) => e.type === "task:error" && e.taskName === "step",
+    );
+    expect(errorEv).toBeDefined();
+    if (errorEv?.type === "task:error") {
+      expect(errorEv.attempt).toBe(3);
+      expect(errorEv.terminal).toBe(true);
     }
   });
 });
@@ -477,6 +556,70 @@ describe("function node — hooks", () => {
 
     await new WorkflowExecutor(workflow).run();
     expect(onTaskSkip).toHaveBeenCalledWith("step", "skipIf");
+  });
+});
+
+describe("function node — retry.on behavior (approach B: not consulted)", () => {
+  it("retries on any thrown error regardless of retry.on value", async () => {
+    // retry.on is ignored for fn tasks — fn errors are not classified as
+    // RetryErrorKind (which are agent/runner-specific). The task retries on
+    // any thrown error from execute(), controlled solely by retry.max.
+    let callCount = 0;
+    const flakyFn = defineFunction({
+      input: z.object({ x: z.number() }),
+      output: z.object({ result: z.number() }),
+      execute: async ({ x }) => {
+        callCount++;
+        if (callCount < 3) throw new Error("transient failure");
+        return { result: x };
+      },
+    });
+
+    const workflow = defineWorkflow({
+      name: "fn-retry-on-ignored",
+      tasks: {
+        step: {
+          fn: flakyFn,
+          input: { x: 5 },
+          // retry.on has no effect for fn tasks
+          retry: { max: 3, on: ["subprocess_error"], backoff: "fixed" },
+        },
+      },
+    });
+
+    const executor = new WorkflowExecutor(workflow);
+    const result = await executor.run();
+    expect(callCount).toBe(3);
+    expect(result.outputs.step).toEqual({ result: 5 });
+  });
+
+  it("zod validation errors are never retried even when retry.max > 1", async () => {
+    let callCount = 0;
+    const badOutputFn = defineFunction({
+      input: z.object({ x: z.number() }),
+      output: z.object({ result: z.string() }),
+      execute: async () => {
+        callCount++;
+        // biome-ignore lint/suspicious/noExplicitAny: intentional bad output for test
+        return { result: 42 } as any;
+      },
+    });
+
+    const workflow = defineWorkflow({
+      name: "fn-zod-no-retry",
+      tasks: {
+        step: {
+          fn: badOutputFn,
+          input: { x: 1 },
+          retry: { max: 3, on: [], backoff: "fixed" },
+        },
+      },
+    });
+
+    const executor = new WorkflowExecutor(workflow);
+    await expect(executor.run()).rejects.toThrow(/output validation failed/);
+    // Only called once — validation errors are not retried
+    expect(callCount).toBe(1);
   });
 });
 
