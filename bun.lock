@@ -103,14 +103,16 @@
     },
     "packages/cli": {
       "name": "@ageflow/cli",
-      "version": "0.3.0",
+      "version": "0.4.2",
       "bin": {
         "agentwf": "./dist/bin.js",
       },
       "dependencies": {
-        "@ageflow/core": "workspace:*",
-        "@ageflow/executor": "workspace:*",
-        "@ageflow/mcp-server": "workspace:*",
+        "@ageflow/core": "^0.4.3",
+        "@ageflow/executor": "^0.4.3",
+        "@ageflow/learning": "^0.4.1",
+        "@ageflow/learning-sqlite": "^0.4.1",
+        "@ageflow/mcp-server": "^0.3.3",
         "boxen": "^8.0.0",
         "chalk": "^5.3.0",
         "commander": "^12.0.0",
@@ -124,7 +126,7 @@
     },
     "packages/core": {
       "name": "@ageflow/core",
-      "version": "0.3.0",
+      "version": "0.4.3",
       "devDependencies": {
         "@types/node": "^22.0.0",
         "vitest": "^2.1.0",
@@ -136,9 +138,9 @@
     },
     "packages/executor": {
       "name": "@ageflow/executor",
-      "version": "0.3.0",
+      "version": "0.4.3",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
+        "@ageflow/core": "^0.4.3",
         "zod-to-json-schema": "^3.23.0",
       },
       "devDependencies": {
@@ -149,9 +151,9 @@
     },
     "packages/learning": {
       "name": "@ageflow/learning",
-      "version": "0.3.0",
+      "version": "0.4.1",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
+        "@ageflow/core": "^0.4.3",
       },
       "devDependencies": {
         "@ageflow/executor": "workspace:*",
@@ -161,7 +163,7 @@
         "zod": "^3.23.0",
       },
       "peerDependencies": {
-        "@ageflow/executor": "workspace:*",
+        "@ageflow/executor": "^0.4.3",
       },
       "optionalPeers": [
         "@ageflow/executor",
@@ -169,9 +171,9 @@
     },
     "packages/learning-sqlite": {
       "name": "@ageflow/learning-sqlite",
-      "version": "0.3.0",
+      "version": "0.4.1",
       "dependencies": {
-        "@ageflow/learning": "workspace:*",
+        "@ageflow/learning": "^0.4.1",
       },
       "devDependencies": {
         "@types/bun": "^1.1.0",
@@ -181,11 +183,11 @@
     },
     "packages/mcp-server": {
       "name": "@ageflow/mcp-server",
-      "version": "0.3.0",
+      "version": "0.3.3",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
-        "@ageflow/executor": "workspace:*",
-        "@ageflow/server": "workspace:*",
+        "@ageflow/core": "^0.4.3",
+        "@ageflow/executor": "^0.4.3",
+        "@ageflow/server": "^0.4.2",
         "@modelcontextprotocol/sdk": "^1.0.0",
         "zod-to-json-schema": "^3.23.0",
       },
@@ -198,7 +200,7 @@
     },
     "packages/runners/api": {
       "name": "@ageflow/runner-api",
-      "version": "0.3.0",
+      "version": "0.3.3",
       "dependencies": {
         "@ageflow/core": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.0.0",
@@ -212,7 +214,7 @@
     },
     "packages/runners/claude": {
       "name": "@ageflow/runner-claude",
-      "version": "0.3.0",
+      "version": "0.3.3",
       "dependencies": {
         "@ageflow/core": "workspace:*",
       },
@@ -224,7 +226,7 @@
     },
     "packages/runners/codex": {
       "name": "@ageflow/runner-codex",
-      "version": "0.3.0",
+      "version": "0.3.3",
       "dependencies": {
         "@ageflow/core": "workspace:*",
       },
@@ -236,10 +238,10 @@
     },
     "packages/server": {
       "name": "@ageflow/server",
-      "version": "0.3.0",
+      "version": "0.4.2",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
-        "@ageflow/executor": "workspace:*",
+        "@ageflow/core": "^0.4.3",
+        "@ageflow/executor": "^0.4.3",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -249,10 +251,10 @@
     },
     "packages/testing": {
       "name": "@ageflow/testing",
-      "version": "0.3.0",
+      "version": "0.3.3",
       "dependencies": {
-        "@ageflow/core": "workspace:*",
-        "@ageflow/executor": "workspace:*",
+        "@ageflow/core": "^0.4.3",
+        "@ageflow/executor": "^0.4.3",
         "@modelcontextprotocol/sdk": "^1.0.0",
       },
       "devDependencies": {

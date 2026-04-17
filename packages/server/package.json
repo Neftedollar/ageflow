@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/server",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Embeddable execution surface for ageflow workflows: stream, fire-and-forget, async HITL, cancellation.",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/server",
   "type": "module",
@@ -22,8 +22,8 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@ageflow/core": "^0.4.2",
-    "@ageflow/executor": "^0.3.2"
+    "@ageflow/core": "^0.4.3",
+    "@ageflow/executor": "^0.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
