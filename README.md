@@ -58,21 +58,79 @@ bun add -g @ageflow/cli
 
 ## Quick start
 
+### 1. Install
+
 ```bash
-# Scaffold a new project
-agentwf init my-workflow
-cd my-workflow
-bun install
-
-# Preview prompts without running agents
-agentwf dry-run workflow.ts
-
-# Validate DAG and runner availability
-agentwf validate workflow.ts
-
-# Run
-agentwf run workflow.ts
+bun add @ageflow/core @ageflow/executor @ageflow/runner-api zod
 ```
+
+### 2. Define an agent and workflow
+
+Create `workflow.ts`:
+
+```ts
+import { defineAgent, defineWorkflow, registerRunner } from "@ageflow/core";
+import { WorkflowExecutor } from "@ageflow/executor";
+import { ApiRunner } from "@ageflow/runner-api";
+import { z } from "zod";
+
+// Register a runner backed by any fetch-compatible endpoint
+registerRunner("api", new ApiRunner({
+  baseUrl: "https://api.openai.com/v1",
+  apiKey: process.env.OPENAI_API_KEY ?? "",
+}));
+
+const summarizeAgent = defineAgent({
+  runner: "api",
+  model: "gpt-4o-mini",
+  input: z.object({ text: z.string() }),
+  output: z.object({ summary: z.string() }),
+  prompt: ({ text }) => `Summarize in one sentence:\n\n${text}`,
+});
+
+const workflow = defineWorkflow({
+  name: "hello-world",
+  tasks: {
+    summarize: {
+      agent: summarizeAgent,
+      input: { text: "ageflow is a TypeScript DSL for multi-agent AI workflows." },
+    },
+  },
+});
+
+const executor = new WorkflowExecutor(workflow);
+const result = await executor.run({});
+console.log(result.outputs.summarize.summary);
+```
+
+### 3. Run
+
+```bash
+bun run workflow.ts
+```
+
+Or via the CLI:
+
+```bash
+bunx agentwf run workflow.ts
+```
+
+Other CLI commands:
+
+```bash
+agentwf dry-run workflow.ts   # preview prompts without calling agents
+agentwf validate workflow.ts  # check DAG structure and runner availability
+agentwf init my-workflow      # scaffold a new project
+```
+
+### 4. Next steps
+
+- [`examples/`](examples/) — working end-to-end pipelines
+- [`packages/core`](packages/core) — DSL reference (`defineAgent`, `defineWorkflow`, `loop`, `sessionToken`)
+- [`packages/executor`](packages/executor) — executor options, HITL, budget guard
+- [`packages/testing`](packages/testing) — mock runners, unit-test workflows without API calls
+- [`@ageflow/learning`](https://www.npmjs.com/package/@ageflow/learning) — self-evolving agent skills
+- npm: [`@ageflow/core`](https://www.npmjs.com/package/@ageflow/core) · [`@ageflow/executor`](https://www.npmjs.com/package/@ageflow/executor) · [`@ageflow/runner-api`](https://www.npmjs.com/package/@ageflow/runner-api) · [`@ageflow/cli`](https://www.npmjs.com/package/@ageflow/cli)
 
 ## Packages
 
