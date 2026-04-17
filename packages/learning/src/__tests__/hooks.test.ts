@@ -8,6 +8,7 @@ import type {
   SkillRecord,
   TraceFilter,
 } from "../types.js";
+import * as reflectionModule from "../workflows/reflection.js";
 
 // ─── In-memory mock stores ────────────────────────────────────────────────────
 
@@ -360,5 +361,123 @@ describe("createLearningHooks", () => {
     expect(trace.taskTraces).toHaveLength(2);
     expect(trace.taskTraces[0].agentRunner).toBe("api");
     expect(trace.taskTraces[1].agentRunner).toBe("anthropic");
+  });
+
+  // ─── #171: reflectEvery scheduler ────────────────────────────────────────────
+
+  describe("#171: reflectEvery scheduler", () => {
+    const dagStructure = { taskA: [] as readonly string[] };
+
+    async function runWorkflow(
+      hooks: ReturnType<typeof createLearningHooks>,
+    ): Promise<void> {
+      hooks.onTaskStart?.("taskA", "api");
+      hooks.onTaskComplete?.("taskA", "out", makeTaskMetrics());
+      await hooks.onWorkflowComplete?.({}, makeMetrics());
+    }
+
+    it("reflectEvery: 3 + 9 completions → runReflection fires 3 times", async () => {
+      const spy = vi
+        .spyOn(reflectionModule, "runReflection")
+        .mockResolvedValue({
+          workflowScore: 0.8,
+          skillsGenerated: 0,
+          skillsUpdated: 0,
+          tasksReflected: [],
+          taskScores: {},
+        });
+
+      const hooks = createLearningHooks({
+        skillStore: makeSkillStore(),
+        traceStore: makeTraceStore(),
+        workflowName: "test-wf",
+        dagStructure,
+        config: { reflectEvery: 3 },
+      });
+
+      for (let i = 0; i < 9; i++) {
+        await runWorkflow(hooks);
+      }
+      // Allow fire-and-forget promises to settle
+      await Promise.resolve();
+
+      expect(spy).toHaveBeenCalledTimes(3);
+      spy.mockRestore();
+    });
+
+    it("reflectEvery: 1 + 1 completion → runReflection fires once", async () => {
+      const spy = vi
+        .spyOn(reflectionModule, "runReflection")
+        .mockResolvedValue({
+          workflowScore: 0.9,
+          skillsGenerated: 0,
+          skillsUpdated: 0,
+          tasksReflected: [],
+          taskScores: {},
+        });
+
+      const hooks = createLearningHooks({
+        skillStore: makeSkillStore(),
+        traceStore: makeTraceStore(),
+        workflowName: "test-wf",
+        dagStructure,
+        config: { reflectEvery: 1 },
+      });
+
+      await runWorkflow(hooks);
+      await Promise.resolve();
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      spy.mockRestore();
+    });
+
+    it("reflectEvery: undefined (default) → never fires automatically", async () => {
+      const spy = vi
+        .spyOn(reflectionModule, "runReflection")
+        .mockResolvedValue({
+          workflowScore: 0.9,
+          skillsGenerated: 0,
+          skillsUpdated: 0,
+          tasksReflected: [],
+          taskScores: {},
+        });
+
+      // No reflectEvery in config and no dagStructure → should never fire
+      const hooks = createLearningHooks({
+        skillStore: makeSkillStore(),
+        traceStore: makeTraceStore(),
+        workflowName: "test-wf",
+        // No dagStructure — auto-reflection disabled
+      });
+
+      await runWorkflow(hooks);
+      await runWorkflow(hooks);
+      await runWorkflow(hooks);
+      await Promise.resolve();
+
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it("runReflection failure does NOT crash workflow (fire-and-forget)", async () => {
+      const spy = vi
+        .spyOn(reflectionModule, "runReflection")
+        .mockRejectedValue(new Error("LLM API down"));
+
+      const hooks = createLearningHooks({
+        skillStore: makeSkillStore(),
+        traceStore: makeTraceStore(),
+        workflowName: "test-wf",
+        dagStructure,
+        config: { reflectEvery: 1 },
+      });
+
+      // onWorkflowComplete must resolve without throwing even if runReflection rejects
+      await expect(runWorkflow(hooks)).resolves.toBeUndefined();
+      await Promise.resolve();
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      spy.mockRestore();
+    });
   });
 });
