@@ -342,7 +342,7 @@ export async function runNode<
 
       // Fire onTaskSpawnArgs hook (best-effort — errors must not crash the task)
       try {
-        hooks?.onTaskSpawnArgs?.(taskName, spawnArgs);
+        await hooks?.onTaskSpawnArgs?.(taskName, spawnArgs);
       } catch (hookErr) {
         console.warn(
           "[agentflow] onTaskSpawnArgs hook error for task %s:",
@@ -355,7 +355,7 @@ export async function runNode<
 
       // Fire onTaskSpawnResult hook (best-effort — errors must not crash the task)
       try {
-        hooks?.onTaskSpawnResult?.(taskName, spawnResult);
+        await hooks?.onTaskSpawnResult?.(taskName, spawnResult);
       } catch (hookErr) {
         console.warn(
           "[agentflow] onTaskSpawnResult hook error for task %s:",
