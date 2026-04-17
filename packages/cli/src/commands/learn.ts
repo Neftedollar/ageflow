@@ -145,7 +145,7 @@ export function registerLearnCommand(program: Command): void {
 
         let count = 0;
         for (const s of skills) {
-          const filename = `${s.name.replace(/[^a-zA-Z0-9_-]/g, "-")}.skill.md`;
+          const filename = `${s.name.replace(/[^a-zA-Z0-9_-]/g, "-")}-v${s.version}-${s.id.slice(0, 8)}.skill.md`;
           const filePath = path.join(outDir, filename);
           const frontmatter = [
             "---",
@@ -161,6 +161,7 @@ export function registerLearnCommand(program: Command): void {
             `score: ${s.score}`,
             `runCount: ${s.runCount}`,
             `bestInLineage: ${s.bestInLineage}`,
+            `createdAt: ${s.createdAt}`,
             "---",
             "",
           ].join("\n");
