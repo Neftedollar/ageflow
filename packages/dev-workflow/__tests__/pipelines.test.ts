@@ -1,11 +1,11 @@
 // Smoke tests for the pipeline factories — confirms that `feature`, `bugfix`,
-// and `docs` build valid DAGs at definition time with the role prompts
-// loaded from disk.
+// `docs`, and `release` build valid DAGs at definition time.
 
 import { describe, expect, it } from "vitest";
 import { createBugfixPipeline } from "../pipelines/bugfix.js";
 import { createDocsPipeline } from "../pipelines/docs.js";
 import { createFeaturePipeline } from "../pipelines/feature.js";
+import { createReleasePipeline, semverBump } from "../pipelines/release.js";
 import type { WorkflowInput } from "../shared/types.js";
 
 const FAKE_INPUT: WorkflowInput = {
@@ -239,5 +239,75 @@ describe("docs pipeline", () => {
     const publish = wf.tasks.publish as { dependsOn?: readonly string[] };
     expect(publish.dependsOn).toContain("draft");
     expect(publish.dependsOn).toContain("review");
+  });
+});
+
+describe("release pipeline", () => {
+  it("builds a workflow named release-pipeline with 4 tasks", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    expect(wf.name).toBe("release-pipeline");
+    const keys = Object.keys(wf.tasks).sort();
+    expect(keys).toEqual(["bump", "changelog", "cleanup", "publish"]);
+  });
+
+  it("all 4 tasks are defineFunction (fn), not agent", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    for (const key of ["bump", "changelog", "publish", "cleanup"] as const) {
+      const task = wf.tasks[key] as { agent?: unknown; fn?: unknown };
+      expect(task.fn).toBeDefined();
+      expect(task.agent).toBeUndefined();
+    }
+  });
+
+  it("bump has no dependsOn", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    const bump = wf.tasks.bump as { dependsOn?: readonly string[] };
+    expect(bump.dependsOn).toBeUndefined();
+  });
+
+  it("changelog dependsOn bump", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    const changelog = wf.tasks.changelog as { dependsOn?: readonly string[] };
+    expect(changelog.dependsOn).toContain("bump");
+  });
+
+  it("publish dependsOn changelog and bump", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    const publish = wf.tasks.publish as { dependsOn?: readonly string[] };
+    expect(publish.dependsOn).toContain("changelog");
+    expect(publish.dependsOn).toContain("bump");
+  });
+
+  it("cleanup dependsOn publish and bump", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    const cleanup = wf.tasks.cleanup as { dependsOn?: readonly string[] };
+    expect(cleanup.dependsOn).toContain("publish");
+    expect(cleanup.dependsOn).toContain("bump");
+  });
+});
+
+describe("semverBump", () => {
+  it("patch: increments patch, leaves major/minor", () => {
+    expect(semverBump("1.2.3", "patch")).toBe("1.2.4");
+    expect(semverBump("0.0.0", "patch")).toBe("0.0.1");
+    expect(semverBump("1.0.0", "patch")).toBe("1.0.1");
+  });
+
+  it("minor: increments minor, resets patch", () => {
+    expect(semverBump("1.2.3", "minor")).toBe("1.3.0");
+    expect(semverBump("0.5.9", "minor")).toBe("0.6.0");
+    expect(semverBump("2.0.0", "minor")).toBe("2.1.0");
+  });
+
+  it("major: increments major, resets minor + patch", () => {
+    expect(semverBump("1.2.3", "major")).toBe("2.0.0");
+    expect(semverBump("0.9.9", "major")).toBe("1.0.0");
+    expect(semverBump("3.4.5", "major")).toBe("4.0.0");
+  });
+
+  it("throws on invalid semver string", () => {
+    expect(() => semverBump("not-a-version", "patch")).toThrow(
+      "invalid semver",
+    );
   });
 });
