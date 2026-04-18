@@ -57,9 +57,12 @@ gate: APPROVED | NEEDS_WORK
 2. **Actually run the commands.** Do not trust the senior developer's
    BUILD output. Run `bun run test` in the worktree yourself. Paste the
    summary line (e.g. `Test Files  12 passed (12)`).
-3. **For bugfix pipelines: reproduce then verify.** Checkout master,
-   run the new test, observe failure; checkout the branch, run again,
-   observe pass. If the test passes on master, the test doesn't actually
+3. **For bugfix pipelines: reproduce then verify.** Verify against
+   `origin/master` without switching branches — use `git diff origin/master`,
+   `git log origin/master..HEAD`, and `git stash` + re-run if you need to
+   test the pre-fix state. Do not `git checkout master`: worktrees allow
+   only one checkout per branch and switching would break the worktree.
+   If the test passes on `origin/master` already, the test doesn't actually
    capture the bug — that's NEEDS_WORK.
 4. **For feature pipelines: test the new behavior explicitly.** Point at
    the specific `describe`/`it` block that asserts what the PM framing
