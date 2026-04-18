@@ -152,8 +152,6 @@ const publishFn = defineFunction({
       [
         "pr",
         "create",
-        "--base",
-        "master",
         "--head",
         currentBranch,
         "--title",
