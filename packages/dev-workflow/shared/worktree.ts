@@ -6,6 +6,33 @@ import { basename, dirname, join } from "node:path";
 import { execa } from "execa";
 import type { Issue } from "./types.js";
 
+/**
+ * Derive the repo's default branch name dynamically.
+ * Tries `git symbolic-ref` first (fast, local); falls back to `gh repo view`
+ * (network call) if the remote HEAD ref is not set locally.
+ */
+async function getDefaultBranch(): Promise<string> {
+  // Try git first (faster)
+  try {
+    const { stdout } = await execa("git", [
+      "symbolic-ref",
+      "refs/remotes/origin/HEAD",
+    ]);
+    return stdout.trim().replace(/^refs\/remotes\/origin\//, "");
+  } catch {
+    // Fallback to gh
+    const { stdout } = await execa("gh", [
+      "repo",
+      "view",
+      "--json",
+      "defaultBranchRef",
+      "-q",
+      ".defaultBranchRef.name",
+    ]);
+    return stdout.trim();
+  }
+}
+
 /** Derive a branch name for the issue. Max 80 chars (git + GitHub limit). */
 export function branchName(
   issue: Pick<Issue, "number" | "title" | "labels">,
@@ -37,14 +64,15 @@ export async function createWorktree(
 ): Promise<string> {
   const path = worktreePath(repoRoot, issue.number);
   const branch = branchName(issue);
+  const base = await getDefaultBranch();
 
   // Sub-PR 1: dry stub — log only, no actual git call.
   console.log(
-    `[worktree] would create: git worktree add ${path} -b ${branch} master`,
+    `[worktree] would create: git worktree add ${path} -b ${branch} ${base}`,
   );
 
   // Sub-PR 4: replace the log above with the real call below.
-  // await execa("git", ["worktree", "add", path, "-b", branch, "master"], {
+  // await execa("git", ["worktree", "add", path, "-b", branch, base], {
   //   cwd: repoRoot,
   // });
 

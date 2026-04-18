@@ -69,12 +69,16 @@ accidentally land on master).
    - If either check fails, gate NEEDS_WORK.
 
 2. **Apply version bumps.** For each `{package, from, to}` in
-   `versionBumps`, edit `packages/<name>/package.json` (or
-   `packages/runners/<name>/package.json`) and update `"version"`. For
-   each entry in `depRangeBumps`, update the corresponding dependency
-   range. Do not run `bun install` — workspace links override lockfile
-   content for local packages at install time (lockfile staleness is a
-   Codex false positive, not a real issue).
+   `versionBumps`, locate the package directory by reading
+   `packages/*/package.json` and `packages/runners/*/package.json` and
+   matching the `"name"` field — do not assume the directory name matches
+   the package name (e.g. `@ageflow/runner-api` lives under
+   `packages/runners/api/`, not `packages/runner-api/`). Once located,
+   edit that directory's `package.json` and update `"version"`. For each
+   entry in `depRangeBumps`, update the corresponding dependency range.
+   Do not run `bun install` — workspace links override lockfile content
+   for local packages at install time (lockfile staleness is a Codex
+   false positive, not a real issue).
 
 3. **Stage explicitly.** Never `git add -A`. Stage one path per call:
    ```sh
