@@ -20,6 +20,7 @@ const PUBLISH_ORDER = [
   "@ageflow/runner-claude",
   "@ageflow/runner-codex",
   "@ageflow/runner-api",
+  "@ageflow/runner-anthropic",
   "@ageflow/testing",
   "@ageflow/server",
   "@ageflow/mcp-server",
@@ -107,6 +108,13 @@ const bumpFn = defineFunction({
     ),
   }),
   execute: async (input) => {
+    if (input.affectedPackages.length === 0) {
+      throw new Error(
+        "affectedPackages is empty — no packages to bump. " +
+          "The release issue body must mention at least one @ageflow/<pkg>.",
+      );
+    }
+
     // Determine bump kind from labels
     const labelLower = input.labels.map((l) => l.toLowerCase());
     let bumpKind: "patch" | "minor" | "major" = "patch";
@@ -234,6 +242,15 @@ const publishFn = defineFunction({
       }
     }
 
+    if (skipped.length > 0) {
+      const details = skipped
+        .map((s) => `${s.package}: ${s.reason}`)
+        .join("; ");
+      throw new Error(
+        `publish failed for ${skipped.length} package(s): ${details}`,
+      );
+    }
+
     return { published, skipped };
   },
 });
@@ -280,15 +297,21 @@ export const createReleasePipeline = defineWorkflowFactory(
       // BUMP — determine semver kind from labels; rewrite package.json versions.
       bump: {
         fn: bumpFn,
-        input: () => ({
-          issueNumber: input.issue.number,
-          labels: [...input.issue.labels],
-          issueBody: input.issue.body,
-          worktreePath: input.worktreePath,
-          // TODO: parse affectedPackages from issue body. For now empty → no-op;
-          // operator fills via issue labels/body convention.
-          affectedPackages: [] as string[],
-        }),
+        input: () => {
+          // Parse affected packages from the issue body.
+          // Convention: the release issue body mentions @ageflow/<pkg> names
+          // (e.g. in a fenced list or inline). De-duplicate with Set.
+          const pkgMatches =
+            input.issue.body.match(/@ageflow\/[a-z-]+/g) ?? [];
+          const affectedPackages = [...new Set(pkgMatches)];
+          return {
+            issueNumber: input.issue.number,
+            labels: [...input.issue.labels],
+            issueBody: input.issue.body,
+            worktreePath: input.worktreePath,
+            affectedPackages,
+          };
+        },
       },
 
       // CHANGELOG — append a dated section to CHANGELOG.md at repo root.
@@ -360,5 +383,5 @@ export const createReleasePipeline = defineWorkflowFactory(
   }),
 );
 
-// Export helpers for use in tests.
-export { semverBump, findPackageDir };
+// Export helpers and task functions for use in tests.
+export { semverBump, findPackageDir, bumpFn, publishFn, PUBLISH_ORDER };

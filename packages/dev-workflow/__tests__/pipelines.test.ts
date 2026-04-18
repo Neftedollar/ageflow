@@ -1,11 +1,17 @@
 // Smoke tests for the pipeline factories — confirms that `feature`, `bugfix`,
 // `docs`, and `release` build valid DAGs at definition time.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createBugfixPipeline } from "../pipelines/bugfix.js";
 import { createDocsPipeline } from "../pipelines/docs.js";
 import { createFeaturePipeline } from "../pipelines/feature.js";
-import { createReleasePipeline, semverBump } from "../pipelines/release.js";
+import {
+  PUBLISH_ORDER,
+  bumpFn,
+  createReleasePipeline,
+  publishFn,
+  semverBump,
+} from "../pipelines/release.js";
 import type { WorkflowInput } from "../shared/types.js";
 
 const FAKE_INPUT: WorkflowInput = {
@@ -283,6 +289,85 @@ describe("release pipeline", () => {
     const cleanup = wf.tasks.cleanup as { dependsOn?: readonly string[] };
     expect(cleanup.dependsOn).toContain("publish");
     expect(cleanup.dependsOn).toContain("bump");
+  });
+});
+
+describe("bumpFn.execute — P1-1 guard", () => {
+  it("throws when affectedPackages is empty", async () => {
+    await expect(
+      bumpFn.execute({
+        issueNumber: 1,
+        labels: ["patch"],
+        issueBody: "no package references here",
+        worktreePath: "/tmp/fake-wt",
+        affectedPackages: [],
+      }),
+    ).rejects.toThrow("affectedPackages is empty");
+  });
+
+  it("does not throw when affectedPackages has at least one entry", async () => {
+    // The package dir won't exist on disk, so bumps will be empty but no throw.
+    const result = await bumpFn.execute({
+      issueNumber: 1,
+      labels: ["patch"],
+      issueBody: "@ageflow/core",
+      worktreePath: "/tmp/fake-wt-nonexistent",
+      affectedPackages: ["@ageflow/core"],
+    });
+    // No throw — bumps empty because dir doesn't exist, bumpKind defaults patch.
+    expect(result.bumpKind).toBe("patch");
+    expect(result.bumps).toEqual([]);
+  });
+});
+
+describe("publishFn.execute — P1-3 throw on failure", () => {
+  it("throws when any npm publish fails (skipped.length > 0)", async () => {
+    // Mock execa to reject for @ageflow/core, succeed for nothing else.
+    vi.mock("execa", () => ({
+      execa: vi
+        .fn()
+        .mockRejectedValue(new Error("E403 Forbidden — auth required")),
+    }));
+
+    await expect(
+      publishFn.execute({
+        bumps: [{ package: "@ageflow/core", before: "0.6.0", after: "0.6.1" }],
+        worktreePath: "/tmp/fake-wt-nonexistent",
+        plan: false,
+      }),
+    ).rejects.toThrow("publish failed for");
+
+    vi.restoreAllMocks();
+  });
+
+  it("does not throw in plan:true mode (dry-run — no real publish)", async () => {
+    // plan:true path never calls execa, so no failures.
+    const result = await publishFn.execute({
+      bumps: [{ package: "@ageflow/core", before: "0.6.0", after: "0.6.1" }],
+      worktreePath: "/tmp/fake-wt-nonexistent",
+      plan: true,
+    });
+    expect(result.published).toContain("@ageflow/core");
+    expect(result.skipped).toHaveLength(0);
+  });
+});
+
+describe("PUBLISH_ORDER — P1-2 runner-anthropic included", () => {
+  it("contains @ageflow/runner-anthropic", () => {
+    expect(PUBLISH_ORDER).toContain("@ageflow/runner-anthropic");
+  });
+
+  it("@ageflow/runner-anthropic appears after @ageflow/runner-api", () => {
+    const apiIdx = PUBLISH_ORDER.indexOf("@ageflow/runner-api");
+    const anthropicIdx = PUBLISH_ORDER.indexOf("@ageflow/runner-anthropic");
+    expect(apiIdx).toBeGreaterThanOrEqual(0);
+    expect(anthropicIdx).toBeGreaterThan(apiIdx);
+  });
+
+  it("@ageflow/runner-anthropic appears before @ageflow/testing", () => {
+    const anthropicIdx = PUBLISH_ORDER.indexOf("@ageflow/runner-anthropic");
+    const testingIdx = PUBLISH_ORDER.indexOf("@ageflow/testing");
+    expect(anthropicIdx).toBeLessThan(testingIdx);
   });
 });
 
