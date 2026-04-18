@@ -217,17 +217,18 @@ const publishFn = defineFunction({
     for (const pkgName of PUBLISH_ORDER) {
       if (!bumpedNames.has(pkgName)) continue;
 
-      const pkgDir = await findPackageDir(input.worktreePath, pkgName);
-      if (!pkgDir) {
-        skipped.push({ package: pkgName, reason: "package.json not found" });
+      if (input.plan) {
+        // In plan mode, skip actual directory lookup — it's a dry-run.
+        console.log(
+          "[publish] would run: npm publish --access public (cwd: packages/...)",
+        );
+        published.push(pkgName);
         continue;
       }
 
-      if (input.plan) {
-        console.log(
-          `[publish] would run: npm publish --access public (cwd: ${pkgDir})`,
-        );
-        published.push(pkgName);
+      const pkgDir = await findPackageDir(input.worktreePath, pkgName);
+      if (!pkgDir) {
+        skipped.push({ package: pkgName, reason: "package.json not found" });
         continue;
       }
 
@@ -242,7 +243,7 @@ const publishFn = defineFunction({
       }
     }
 
-    if (skipped.length > 0) {
+    if (!input.plan && skipped.length > 0) {
       const details = skipped
         .map((s) => `${s.package}: ${s.reason}`)
         .join("; ");
