@@ -103,7 +103,7 @@
     },
     "packages/cli": {
       "name": "@ageflow/cli",
-      "version": "0.5.3",
+      "version": "0.5.4",
       "bin": {
         "agentwf": "./dist/bin.js",
       },
@@ -138,7 +138,7 @@
     },
     "packages/executor": {
       "name": "@ageflow/executor",
-      "version": "0.6.6",
+      "version": "0.7.0",
       "dependencies": {
         "@ageflow/core": "^0.6.0",
         "zod-to-json-schema": "^3.23.0",
@@ -151,7 +151,7 @@
     },
     "packages/learning": {
       "name": "@ageflow/learning",
-      "version": "0.5.2",
+      "version": "0.5.3",
       "dependencies": {
         "@ageflow/core": "^0.6.0",
       },
@@ -163,7 +163,7 @@
         "zod": "^3.23.0",
       },
       "peerDependencies": {
-        "@ageflow/executor": "^0.6.0",
+        "@ageflow/executor": "^0.7.0",
       },
       "optionalPeers": [
         "@ageflow/executor",
@@ -183,7 +183,7 @@
     },
     "packages/mcp-server": {
       "name": "@ageflow/mcp-server",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "dependencies": {
         "@ageflow/core": "^0.6.0",
         "@ageflow/executor": "^0.6.0",
@@ -252,7 +252,7 @@
     },
     "packages/server": {
       "name": "@ageflow/server",
-      "version": "0.4.4",
+      "version": "0.4.5",
       "dependencies": {
         "@ageflow/core": "^0.6.0",
         "@ageflow/executor": "^0.6.0",
@@ -265,10 +265,10 @@
     },
     "packages/testing": {
       "name": "@ageflow/testing",
-      "version": "0.3.7",
+      "version": "0.3.8",
       "dependencies": {
         "@ageflow/core": "^0.6.0",
-        "@ageflow/executor": "^0.6.0",
+        "@ageflow/executor": "^0.7.0",
         "@modelcontextprotocol/sdk": "^1.0.0",
       },
       "devDependencies": {
