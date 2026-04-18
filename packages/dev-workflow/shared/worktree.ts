@@ -59,10 +59,12 @@ export function worktreePath(repoRoot: string, issueNumber: number): string {
 /**
  * Create a git worktree for the given issue.
  *
- * Stub: logs the would-be path and branch without calling git.
- * Real implementation (execa git worktree add) lands in sub-PR 4.
+ * Calls `git worktree add` to create an isolated working directory on a new
+ * branch. If the worktree or branch already exists (e.g. re-running against
+ * the same issue), the error surfaces to the caller — callers can remove the
+ * existing worktree and retry.
  *
- * @returns Absolute path where the worktree would be created.
+ * @returns Absolute path where the worktree was created.
  */
 export async function createWorktree(
   repoRoot: string,
@@ -72,27 +74,22 @@ export async function createWorktree(
   const branch = branchName(issue);
   const base = await getDefaultBranch(repoRoot);
 
-  // Sub-PR 1: dry stub — log only, no actual git call.
-  console.log(
-    `[worktree] would create: git worktree add ${path} -b ${branch} ${base}`,
-  );
-
-  // Sub-PR 4: replace the log above with the real call below.
-  // await execa("git", ["worktree", "add", path, "-b", branch, base], {
-  //   cwd: repoRoot,
-  // });
+  await execa("git", ["worktree", "add", path, "-b", branch, base], {
+    cwd: repoRoot,
+  });
 
   return path;
 }
 
-/** Remove a worktree after merge/abort. Stub — real call lands in sub-PR 4. */
+/** Remove a worktree after merge/abort. */
 export async function removeWorktree(
   repoRoot: string,
   issueNumber: number,
 ): Promise<void> {
   const path = worktreePath(repoRoot, issueNumber);
-  console.log(`[worktree] would remove: git worktree remove ${path} --force`);
-  // Sub-PR 4: await execa("git", ["worktree", "remove", path, "--force"], { cwd: repoRoot });
+  await execa("git", ["worktree", "remove", path, "--force"], {
+    cwd: repoRoot,
+  });
 }
 
 function pickPrefix(labels: string[]): string {

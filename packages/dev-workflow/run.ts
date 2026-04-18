@@ -26,7 +26,11 @@ import { CodexRunner } from "@ageflow/runner-codex";
 import { determinePipeline, loadIssue } from "./shared/issue-loader.js";
 import { initLearning } from "./shared/learning.js";
 import type { PipelineType, WorkflowInput } from "./shared/types.js";
-import { worktreePath } from "./shared/worktree.js";
+import {
+  createWorktree,
+  removeWorktree,
+  worktreePath,
+} from "./shared/worktree.js";
 
 import { createBugfixPipeline } from "./pipelines/bugfix.js";
 import { createDocsPipeline } from "./pipelines/docs.js";
@@ -44,10 +48,23 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
 
 async function main(): Promise<void> {
-  // Parse argv: --dry-run flag + issue number.
+  // Parse argv: --dry-run flag + issue number + optional --budget=<N>.
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
   const issueNumber = Number(args.find((a) => /^\d+$/.test(a)));
+  const budgetArg = args.find((a) => a.startsWith("--budget="));
+  let maxUsd = 5;
+  if (budgetArg) {
+    const raw = budgetArg.split("=")[1];
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      console.error(
+        `[dev-workflow] invalid --budget value: "${raw}" — must be a positive number`,
+      );
+      process.exit(1);
+    }
+    maxUsd = parsed;
+  }
 
   if (!issueNumber) {
     console.error("Usage: bun run run.ts [--dry-run] <issue-number>");
@@ -63,7 +80,7 @@ async function main(): Promise<void> {
   console.log(`[dev-workflow] labels: [${issue.labels.join(", ")}]`);
   console.log(`[dev-workflow] pipeline: ${pipelineType}`);
 
-  // Build the workflow input (worktree not created yet — stub path).
+  // Build the workflow input with stub path for dry-run plan logging.
   const input: WorkflowInput = {
     issue,
     worktreePath: worktreePath(REPO_ROOT, issue.number),
@@ -84,6 +101,7 @@ async function main(): Promise<void> {
         worktreePath: input.worktreePath,
         specPath: input.specPath,
         dryRun: input.dryRun,
+        budgetUsd: maxUsd,
       },
       null,
       2,
@@ -95,46 +113,72 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Live mode (sub-PR 4b): walks the DAG, fires learning hooks, persists
-  // traces. Agent nodes use CodexRunner — real LLM cost incurred.
-  const { hooks, store, dbPath } = initLearning({
-    repoRoot: REPO_ROOT,
-    workflowName: `dev-workflow:${pipelineType}`,
-    reflectEvery: 3,
-  });
-  console.log(`[dev-workflow] learning store: ${dbPath}`);
-
-  // Register real CodexRunner for the "codex" brand used by all pipelines.
-  // No "claude" registration — no pipeline uses it; a missing registration
-  // yields a clear RunnerNotRegisteredError rather than a silent stub.
-  registerRunner("codex", new CodexRunner());
-
-  const factory = pipelineFactories[pipelineType];
-  const pipeline = factory(input);
-  // Attach hooks via WorkflowDef.hooks field (executor reads from there).
-  // Cast hooks to match the specific task-map type of this pipeline.
-  // biome-ignore lint/suspicious/noExplicitAny: cross-pipeline hooks cast
-  const pipelineWithHooks = { ...pipeline, hooks: hooks as WorkflowHooks<any> };
-
-  const budgetTracker = new BudgetTracker();
-  const executor = new WorkflowExecutor(pipelineWithHooks, { budgetTracker });
-
+  // Outer try/finally: createWorktree is inside so any failure in
+  // initLearning / registerRunner / pipeline construction / executor still
+  // triggers removeWorktree, preventing stale worktrees on error.
+  let worktree: string | undefined;
   try {
-    const result = await executor.run(input);
-    console.log("[dev-workflow] workflow complete:");
-    console.log(
-      JSON.stringify(
-        {
-          workflow: pipelineType,
-          outputKeys: Object.keys(result.outputs ?? {}),
-          metrics: result.metrics,
-        },
-        null,
-        2,
-      ),
-    );
+    worktree = await createWorktree(REPO_ROOT, issue);
+    console.log(`[dev-workflow] worktree created: ${worktree}`);
+
+    const updatedInput: WorkflowInput = { ...input, worktreePath: worktree };
+
+    // Inner try/finally: ensures store.close() runs whenever initLearning
+    // succeeds, regardless of executor success or failure.
+    // Live mode (sub-PR 4b): walks the DAG, fires learning hooks, persists
+    // traces. Agent nodes use CodexRunner — real LLM cost incurred.
+    const { hooks, store, dbPath } = initLearning({
+      repoRoot: REPO_ROOT,
+      workflowName: `dev-workflow:${pipelineType}`,
+      reflectEvery: 3,
+    });
+    console.log(`[dev-workflow] learning store: ${dbPath}`);
+
+    try {
+      // Register real CodexRunner for the "codex" brand used by all pipelines.
+      // No "claude" registration — no pipeline uses it; a missing registration
+      // yields a clear RunnerNotRegisteredError rather than a silent stub.
+      registerRunner("codex", new CodexRunner());
+
+      const factory = pipelineFactories[pipelineType];
+      const pipeline = factory(updatedInput);
+      // Attach hooks and budget cap via WorkflowDef fields (executor reads from there).
+      // BudgetConfig: maxCost = USD cap, onExceed = "halt" aborts on overrun.
+      // Cast hooks to match the specific task-map type of this pipeline.
+      const pipelineWithHooks = {
+        ...pipeline,
+        // biome-ignore lint/suspicious/noExplicitAny: cross-pipeline hooks cast — each pipeline has its own TasksMap
+        hooks: hooks as WorkflowHooks<any>,
+        budget: { maxCost: maxUsd, onExceed: "halt" as const },
+      };
+
+      const budgetTracker = new BudgetTracker();
+      const executor = new WorkflowExecutor(pipelineWithHooks, {
+        budgetTracker,
+      });
+
+      const result = await executor.run(updatedInput);
+      console.log("[dev-workflow] workflow complete:");
+      console.log(
+        JSON.stringify(
+          {
+            workflow: pipelineType,
+            outputKeys: Object.keys(result.outputs ?? {}),
+            metrics: result.metrics,
+          },
+          null,
+          2,
+        ),
+      );
+    } finally {
+      store.close();
+    }
   } finally {
-    store.close();
+    if (worktree !== undefined) {
+      await removeWorktree(REPO_ROOT, issue.number).catch((err: Error) => {
+        console.warn(`[dev-workflow] worktree cleanup failed: ${err.message}`);
+      });
+    }
   }
 }
 
